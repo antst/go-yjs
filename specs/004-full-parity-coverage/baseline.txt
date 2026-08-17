@@ -1,0 +1,12 @@
+goos: darwin
+goarch: arm64
+pkg: github.com/skyterra/y-crdt
+cpu: Apple M1 Max
+BenchmarkDocOps-10    	    9237	    126841 ns/op	  140739 B/op	    2505 allocs/op
+BenchmarkDocOps-10    	    9496	    125329 ns/op	  140739 B/op	    2505 allocs/op
+BenchmarkDocOps-10    	    9830	    123912 ns/op	  140740 B/op	    2505 allocs/op
+BenchmarkDocOps-10    	   10000	    130118 ns/op	  140739 B/op	    2505 allocs/op
+BenchmarkDocOps-10    	    9932	    131309 ns/op	  140740 B/op	    2505 allocs/op
+BenchmarkDocOps-10    	    9874	    121943 ns/op	  140739 B/op	    2505 allocs/op
+PASS
+ok  	github.com/skyterra/y-crdt	8.696s

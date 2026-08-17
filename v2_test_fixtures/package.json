@@ -1,0 +1,13 @@
+{
+  "name": "y-crdt-v2-fixtures",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Generates Yjs V2 reference payloads (pinned yjs@13.6.31) for the Go y-crdt V2 compatibility tests.",
+  "type": "commonjs",
+  "scripts": {
+    "generate": "node generate.js"
+  },
+  "dependencies": {
+    "yjs": "13.6.31"
+  }
+}

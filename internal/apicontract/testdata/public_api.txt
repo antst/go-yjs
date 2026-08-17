@@ -1,0 +1,615 @@
+# Frozen public API contract for the crdt, backend, and protocol packages.
+# Format: <package> <kind> <qualified-name> <shape>
+# Member names retain their owner; a lowercase owner marks an unreachable internal type.
+# Shapes record parameter and result TYPES only — parameter names are omitted because
+# renaming one breaks no caller, and including them would fill the diff with changes that
+# carry no compatibility meaning. A name-only contract previously passed unchanged while
+# Doc.GetMap narrowed its result and NewDoc dropped a parameter; both are breaking and both
+# were invisible. Regenerate deliberately in the same reviewed change as the API decision.
+backend method Fence.Clustered () bool
+backend type DocumentID string
+backend type Fence uint64
+backend type NodeID string
+backend type SourceID string
+backend/cluster field Lease.DocumentID backend.DocumentID
+backend/cluster field Lease.ExpiresAt time.Time
+backend/cluster field Lease.Fence backend.Fence
+backend/cluster field Lease.NodeID backend.NodeID
+backend/cluster method Coordinator.Acquire (context.Context, backend.DocumentID, backend.NodeID, time.Duration) (Lease, error)
+backend/cluster method Coordinator.Locate (context.Context, backend.DocumentID) (Lease, error)
+backend/cluster method Coordinator.Release (context.Context, Lease) error
+backend/cluster method Coordinator.Renew (context.Context, Lease, time.Duration) (Lease, error)
+backend/cluster type Coordinator interface
+backend/cluster type Lease struct
+backend/cluster var ErrLeaseHeld
+backend/cluster var ErrLeaseLost
+backend/cluster var ErrNotFound
+backend/conformance field ClusterHarness.Advance func(time.Duration)
+backend/conformance field ClusterHarness.Coordinator cluster.Coordinator
+backend/conformance func Cluster (*testing.T, ClusterFactory)
+backend/conformance func Hub (*testing.T, HubFactory)
+backend/conformance func Memory (*testing.T, RegistryFactory)
+backend/conformance func Persistence (*testing.T, StoreFactory)
+backend/conformance func PersistenceCompaction (*testing.T, CompactingStoreFactory)
+backend/conformance func PersistenceFenceUpgrade (*testing.T, FenceUpgradeFactory)
+backend/conformance func PersistenceFencing (*testing.T, StoreFactory)
+backend/conformance type ClusterFactory () ClusterHarness
+backend/conformance type ClusterHarness struct
+backend/conformance type CompactingStoreFactory () persistence.CompactingStore
+backend/conformance type FenceUpgradeFactory () (persistence.Store, persistence.Store)
+backend/conformance type HubFactory () hub.Hub
+backend/conformance type RegistryFactory () memory.Registry
+backend/conformance type StoreFactory () persistence.Store
+backend/hub const AwarenessUpdate
+backend/hub const DocumentUpdate
+backend/hub field Message.DocumentID backend.DocumentID
+backend/hub field Message.Kind MessageKind
+backend/hub field Message.Payload []byte
+backend/hub field Message.SourceID backend.SourceID
+backend/hub func NewInProcess () *InProcess
+backend/hub method Hub.Close () error
+backend/hub method Hub.Publish (context.Context, Message) error
+backend/hub method Hub.Subscribe (context.Context, backend.DocumentID, backend.SourceID, Handler) (Subscription, error)
+backend/hub method InProcess.Close () error
+backend/hub method InProcess.Publish (context.Context, Message) error
+backend/hub method InProcess.Subscribe (context.Context, backend.DocumentID, backend.SourceID, Handler) (Subscription, error)
+backend/hub method Subscription.Close () error
+backend/hub method Subscription.SourceID () backend.SourceID
+backend/hub method inProcessSubscription.Close () error
+backend/hub method inProcessSubscription.SourceID () backend.SourceID
+backend/hub type Handler (context.Context, Message) error
+backend/hub type Hub interface
+backend/hub type InProcess struct
+backend/hub type Message struct
+backend/hub type MessageKind uint8
+backend/hub type Subscription interface
+backend/hub var ErrClosed
+backend/hub var ErrInvalidMessage
+backend/memory func NewRegistry () *InProcessRegistry
+backend/memory method Handle.Doc () *crdt.Doc
+backend/memory method Handle.Done () <-chan struct{}
+backend/memory method Handle.Release ()
+backend/memory method InProcessRegistry.Acquire (context.Context, backend.DocumentID, OpenFunc) (Handle, error)
+backend/memory method InProcessRegistry.Close () error
+backend/memory method InProcessRegistry.Evict (backend.DocumentID) error
+backend/memory method InProcessRegistry.Invalidate (context.Context, backend.DocumentID) error
+backend/memory method Registry.Acquire (context.Context, backend.DocumentID, OpenFunc) (Handle, error)
+backend/memory method Registry.Close () error
+backend/memory method Registry.Evict (backend.DocumentID) error
+backend/memory method Registry.Invalidate (context.Context, backend.DocumentID) error
+backend/memory method handle.Doc () *crdt.Doc
+backend/memory method handle.Done () <-chan struct{}
+backend/memory method handle.Release ()
+backend/memory type Handle interface
+backend/memory type InProcessRegistry struct
+backend/memory type OpenFunc (context.Context) (*crdt.Doc, error)
+backend/memory type Registry interface
+backend/memory var ErrClosed
+backend/memory var ErrInUse
+backend/memory var ErrInvalidDocument
+backend/persistence const Fenced
+backend/persistence const Unfenced
+backend/persistence field AppendRequest.DocumentID backend.DocumentID
+backend/persistence field AppendRequest.Fence backend.Fence
+backend/persistence field AppendRequest.Update []byte
+backend/persistence field Checkpoint.Revision Revision
+backend/persistence field Checkpoint.StateVector []byte
+backend/persistence field Checkpoint.Update []byte
+backend/persistence field CompactRequest.Basis Revision
+backend/persistence field CompactRequest.CheckpointUpdate []byte
+backend/persistence field CompactRequest.DocumentID backend.DocumentID
+backend/persistence field CompactRequest.Fence backend.Fence
+backend/persistence field CompactRequest.StateVector []byte
+backend/persistence field LoadOptions.AfterStateVector []byte
+backend/persistence field LoadOptions.Limit int
+backend/persistence field LoadOptions.PageToken PageToken
+backend/persistence field Page.Checkpoint *Checkpoint
+backend/persistence field Page.Next PageToken
+backend/persistence field Page.Through Revision
+backend/persistence field Page.Updates []Record
+backend/persistence field Record.Revision Revision
+backend/persistence field Record.Update []byte
+backend/persistence method Appender.Append (context.Context, AppendRequest) (Revision, error)
+backend/persistence method Compactor.Compact (context.Context, CompactRequest) error
+backend/persistence method Loader.Load (context.Context, backend.DocumentID, LoadOptions) (Page, error)
+backend/persistence method Store.FenceMode () FenceMode
+backend/persistence type AppendRequest struct
+backend/persistence type Appender interface
+backend/persistence type Checkpoint struct
+backend/persistence type CompactRequest struct
+backend/persistence type CompactingStore interface
+backend/persistence type Compactor interface
+backend/persistence type FenceMode uint8
+backend/persistence type LoadOptions struct
+backend/persistence type Loader interface
+backend/persistence type Page struct
+backend/persistence type PageToken string
+backend/persistence type Record struct
+backend/persistence type Revision uint64
+backend/persistence type Store interface
+backend/persistence var ErrConflict
+backend/persistence var ErrCorrupt
+backend/persistence var ErrFenceRequired
+backend/persistence var ErrNotFound
+backend/persistence var ErrStaleFence
+backend/persistence var ErrUnexpectedFence
+crdt const ActionAdd
+crdt const ActionDelete
+crdt const ActionUpdate
+crdt const EventOperatorDelete
+crdt const EventOperatorInsertText
+crdt const EventOperatorInsertValue
+crdt const EventOperatorNone
+crdt const EventOperatorRetain
+crdt const OutdatedTimeout
+crdt field AbsolutePosition.Assoc Number
+crdt field AbsolutePosition.Index Number
+crdt field AbsolutePosition.Type SharedType
+crdt field Awareness.ClientID Number
+crdt field Awareness.Doc *Doc
+crdt field Awareness.Observable *Observable
+crdt field Doc.AutoLoad bool
+crdt field Doc.ClientID Number
+crdt field Doc.GC bool
+crdt field Doc.Guid string
+crdt field Doc.Meta interface{}
+crdt field Doc.Observable *Observable
+crdt field Doc.ShouldLoad bool
+crdt field EventAction.Action string
+crdt field EventAction.NewValue interface{}
+crdt field EventAction.OldValue interface{}
+crdt field EventOperator.Attributes Object
+crdt field EventOperator.Insert interface{}
+crdt field EventOperator.InsertText string
+crdt field EventOperator.Kind EventOperatorKind
+crdt field EventOperator.Length Number
+crdt field ID.Client Number
+crdt field ID.Clock Number
+crdt field RelativePosition.Assoc Number
+crdt field RelativePosition.Item *ID
+crdt field RelativePosition.Tname string
+crdt field RelativePosition.Type *ID
+crdt field StackItem.Meta map[interface{}]interface{}
+crdt field UndoManager.CaptureTimeout Number
+crdt field UndoManager.CaptureTransaction func(trans *Transaction) bool
+crdt field UndoManager.CurrStackItem *StackItem
+crdt field UndoManager.IgnoreRemoteMapChanges bool
+crdt field UndoManager.LastChange Number
+crdt field UndoManager.Observable *Observable
+crdt field UndoManager.RedoStack []*StackItem
+crdt field UndoManager.Redoing bool
+crdt field UndoManager.TrackedOrigins Set
+crdt field UndoManager.UndoStack []*StackItem
+crdt field UndoManager.Undoing bool
+crdt field YArrayEvent.YEvent YEvent
+crdt field YArrayEvent.YTrans *Transaction
+crdt field YEvent.Changes Object
+crdt field YEvent.Keys map[string]EventAction
+crdt field YMapEvent.KeysChanged ChangedSubs
+crdt field YMapEvent.YEvent YEvent
+crdt field YTextEvent.ChildListChanged bool
+crdt field YTextEvent.KeysChanged ChangedSubs
+crdt field YTextEvent.YEvent YEvent
+crdt field YXmlElement.NodeName string
+crdt field YXmlElement.YXmlFragment YXmlFragment
+crdt field YXmlEvent.AttributesChanged ChangedSubs
+crdt field YXmlEvent.ChildListChanged bool
+crdt field YXmlEvent.YEvent YEvent
+crdt field YXmlText.YText YText
+crdt field structDecodeBlock.Client Number
+crdt field structDecodeBlock.DeclaredCount Number
+crdt field structDecodeBlock.ReserveCount uint64
+crdt field structDecodeBlock.StartClock Number
+crdt field structDecodeResult.Kind decodedStructKind
+crdt field structDecodeResult.Value abstractStruct
+crdt func ApplyAwarenessUpdate (*Awareness, []byte, interface{}) error
+crdt func ApplyUpdate (*Doc, []uint8, interface{}) error
+crdt func ApplyUpdateV2 (*Doc, []uint8, interface{}) error
+crdt func AwarenessStateJSON (Object) string
+crdt func CleanupYTextFormatting (*YText) Number
+crdt func CompareIDs (*ID, *ID) bool
+crdt func CompareRelativePositions (*RelativePosition, *RelativePosition) bool
+crdt func ConvertUpdateFormatV1ToV2 ([]uint8) ([]uint8, error)
+crdt func ConvertUpdateFormatV2ToV1 ([]uint8) ([]uint8, error)
+crdt func CreateAbsolutePositionFromRelativePosition (*RelativePosition, *Doc) *AbsolutePosition
+crdt func CreateDocFromSnapshot (*Doc, *Snapshot, *Doc) (*Doc, error)
+crdt func CreateRelativePositionFromJSON (Object) (*RelativePosition, error)
+crdt func DecodeRelativePosition ([]uint8) (*RelativePosition, error)
+crdt func DecodeSnapshot ([]uint8) (*Snapshot, error)
+crdt func DecodeSnapshotV1 ([]uint8) (*Snapshot, error)
+crdt func DecodeSnapshotV2 ([]uint8) (*Snapshot, error)
+crdt func DecodeStateVector ([]uint8) (map[Number]Number, error)
+crdt func DiffUpdate ([]uint8, []uint8) ([]uint8, error)
+crdt func DiffUpdateV2 ([]uint8, []uint8) ([]uint8, error)
+crdt func EmptySnapshot () *Snapshot
+crdt func EncodeAwarenessUpdate (*Awareness, []Number, map[Number]Object) []byte
+crdt func EncodeRelativePosition (*RelativePosition) []uint8
+crdt func EncodeSnapshot (*Snapshot) ([]uint8, error)
+crdt func EncodeSnapshotV1 (*Snapshot) ([]uint8, error)
+crdt func EncodeSnapshotV2 (*Snapshot) ([]uint8, error)
+crdt func EncodeStateAsUpdate (*Doc, []uint8) ([]uint8, error)
+crdt func EncodeStateAsUpdateV2 (*Doc, []uint8) ([]uint8, error)
+crdt func EncodeStateVector (*Doc) []byte
+crdt func EncodeStateVectorFromUpdate ([]uint8) ([]uint8, error)
+crdt func EncodeStateVectorFromUpdateV2 ([]uint8) ([]uint8, error)
+crdt func EqualSnapshots (*Snapshot, *Snapshot) bool
+crdt func GenID (Number, Number) ID
+crdt func MakeObject (...any) Object
+crdt func MergeUpdates ([][]byte) ([]byte, error)
+crdt func MergeUpdatesV2 ([][]byte) ([]byte, error)
+crdt func ModifyAwarenessUpdate ([]byte, func(interface{}) interface{}) ([]byte, error)
+crdt func NewAbsolutePosition (SharedType, Number, Number) *AbsolutePosition
+crdt func NewAwareness (*Doc) *Awareness
+crdt func NewDefaultYText () *YText
+crdt func NewDeleteDeltaOp (Number) EventOperator
+crdt func NewDoc (string, ...DocOption) *Doc
+crdt func NewManagedAwareness (*Doc) *ManagedAwareness
+crdt func NewManagedAwarenessFrom (*Awareness) *ManagedAwareness
+crdt func NewObservable () *Observable
+crdt func NewObserverHandler (func(v ...interface{})) *ObserverHandler
+crdt func NewRelativePosition (SharedType, *ID, Number) *RelativePosition
+crdt func NewRelativePositionFromTypeIndex (SharedType, Number, Number) *RelativePosition
+crdt func NewRetainDeltaOp (Number, Object) EventOperator
+crdt func NewSet () Set
+crdt func NewSnapshotByDoc (*Doc) *Snapshot
+crdt func NewTextDeltaOp (string, Object) EventOperator
+crdt func NewUndoManager (interface{}, Number, Set) *UndoManager
+crdt func NewValueDeltaOp (any, Object) EventOperator
+crdt func NewYArray () *YArray
+crdt func NewYMap (map[string]interface{}) *YMap
+crdt func NewYText (string) *YText
+crdt func NewYXmlElement (string) *YXmlElement
+crdt func NewYXmlFragment () *YXmlFragment
+crdt func NewYXmlText () *YXmlText
+crdt func NewYXmlTreeWalker (SharedType, func(SharedType) bool) *YXmlTreeWalker
+crdt func ObfuscateUpdate ([]uint8) ([]uint8, error)
+crdt func ParseAwarenessStateJSON (string) (Object, error)
+crdt func ParseUpdateMeta ([]uint8) (map[Number]Number, map[Number]Number, error)
+crdt func RelativePositionToJSON (*RelativePosition) Object
+crdt func RemoveAwarenessStates (*Awareness, []Number, interface{})
+crdt func SnapshotContainsUpdate (*Snapshot, []uint8) (bool, error)
+crdt func SnapshotContainsUpdateV2 (*Snapshot, []uint8) (bool, error)
+crdt func Transact (*Doc, func(trans *Transaction), interface{}, bool)
+crdt func TypeListToArraySnapshot (SharedType, *Snapshot) ArrayAny
+crdt func TypeMapGetAllSnapshot (SharedType, *Snapshot) Object
+crdt func TypeMapGetSnapshot (SharedType, string, *Snapshot) interface{}
+crdt func WithAutoLoad (bool) DocOption
+crdt func WithClientID (Number) DocOption
+crdt func WithGC (bool) DocOption
+crdt func WithMeta (interface{}) DocOption
+crdt func WithReadCache (bool) DocOption
+crdt method Awareness.Destroy ()
+crdt method Awareness.GetLocalState () Object
+crdt method Awareness.GetMeta () map[Number]Object
+crdt method Awareness.GetStates () map[Number]Object
+crdt method Awareness.SetLocalState (Object) error
+crdt method Awareness.SetLocalStateField (string, interface{}) error
+crdt method ChangedSubs.Add (string)
+crdt method ChangedSubs.Delete (string)
+crdt method ChangedSubs.Has (string) bool
+crdt method ChangedSubs.Range (func(string))
+crdt method Doc.Destroy ()
+crdt method Doc.Get (string, TypeConstructor) (SharedType, error)
+crdt method Doc.GetArray (string) *YArray
+crdt method Doc.GetMap (string) *YMap
+crdt method Doc.GetSubdocGuids () Set
+crdt method Doc.GetSubdocs () Set
+crdt method Doc.GetText (string) *YText
+crdt method Doc.GetXmlFragment (string) *YXmlFragment
+crdt method Doc.Load ()
+crdt method Doc.Off (string, *ObserverHandler)
+crdt method Doc.OffUpdate (*ObserverHandler)
+crdt method Doc.OffUpdateV2 (*ObserverHandler)
+crdt method Doc.On (string, *ObserverHandler)
+crdt method Doc.OnUpdate (func(update []byte, origin any)) *ObserverHandler
+crdt method Doc.OnUpdateV2 (func(update []byte, origin any)) *ObserverHandler
+crdt method Doc.ToJson () Object
+crdt method Doc.Transact (func(trans *Transaction), interface{})
+crdt method EventOperator.GetKind () EventOperatorKind
+crdt method EventOperator.HasAttributes () bool
+crdt method EventOperator.InsertValue () any
+crdt method EventOperator.IsInsert () bool
+crdt method EventOperator.OpLength () Number
+crdt method IEventType.GetCurrentTarget () SharedType
+crdt method IEventType.GetTarget () SharedType
+crdt method IEventType.Path () []interface{}
+crdt method ManagedAwareness.Awareness () *Awareness
+crdt method ManagedAwareness.Destroy ()
+crdt method ManagedAwareness.GetLocalState () Object
+crdt method ManagedAwareness.GetMeta () map[Number]Object
+crdt method ManagedAwareness.GetStates () map[Number]Object
+crdt method ManagedAwareness.On (string, *ObserverHandler)
+crdt method ManagedAwareness.Running () bool
+crdt method ManagedAwareness.SetLocalState (Object) error
+crdt method ManagedAwareness.Start ()
+crdt method ManagedAwareness.Stop ()
+crdt method Object.Delete (string)
+crdt method Object.Get (string) (any, bool)
+crdt method Object.GetOr (string) any
+crdt method Object.GetOrNull (string) any
+crdt method Object.Has (string) bool
+crdt method Object.IsNil () bool
+crdt method Object.Keys () []string
+crdt method Object.Len () int
+crdt method Object.MarshalJSON () ([]byte, error)
+crdt method Object.Range (func(key string, value any))
+crdt method Object.Set (string, any)
+crdt method Object.ShallowClone () Object
+crdt method Object.ToMap () map[string]any
+crdt method Object.UnmarshalJSON ([]byte) error
+crdt method Observable.Destroy ()
+crdt method Observable.Emit (interface{}, ...interface{})
+crdt method Observable.HasObserver (interface{}) bool
+crdt method Observable.HasObservers () bool
+crdt method Observable.Off (interface{}, *ObserverHandler) bool
+crdt method Observable.On (interface{}, *ObserverHandler)
+crdt method Observable.Once (interface{}, *ObserverHandler)
+crdt method Set.Add (any)
+crdt method Set.Delete (any)
+crdt method Set.Has (any) bool
+crdt method Set.Range (func(element any))
+crdt method Transaction.AfterState () map[Number]Number
+crdt method Transaction.BeforeState () map[Number]Number
+crdt method Transaction.ChangedTypes () map[SharedType]ChangedSubs
+crdt method Transaction.Document () *Doc
+crdt method Transaction.IsLocal () bool
+crdt method Transaction.Meta () map[interface{}]Set
+crdt method Transaction.Origin () any
+crdt method Transaction.SubdocsAdded () Set
+crdt method Transaction.SubdocsLoaded () Set
+crdt method Transaction.SubdocsRemoved () Set
+crdt method UndoManager.AddToScope (...interface{})
+crdt method UndoManager.AddTrackedOrigin (interface{})
+crdt method UndoManager.CanRedo () bool
+crdt method UndoManager.CanUndo () bool
+crdt method UndoManager.Clear (bool, bool)
+crdt method UndoManager.Destroy ()
+crdt method UndoManager.GetDoc () *Doc
+crdt method UndoManager.Redo () *StackItem
+crdt method UndoManager.RemoveTrackedOrigin (interface{})
+crdt method UndoManager.StopCapturing ()
+crdt method UndoManager.Undo () *StackItem
+crdt method YArray.Clone () *YArray
+crdt method YArray.Delete (Number, Number)
+crdt method YArray.ForEach (func(interface{}, Number, *YArray))
+crdt method YArray.From (ArrayAny) *YArray
+crdt method YArray.Get (Number) interface{}
+crdt method YArray.GetLength () Number
+crdt method YArray.Insert (Number, ArrayAny)
+crdt method YArray.Map (func(interface{}, Number, *YArray) interface{}) ArrayAny
+crdt method YArray.Push (ArrayAny)
+crdt method YArray.Splice (Number, Number) ArrayAny
+crdt method YArray.ToArray () ArrayAny
+crdt method YArray.ToJson () interface{}
+crdt method YArray.Unshift (ArrayAny)
+crdt method YEvent.GetChanges () Object
+crdt method YEvent.GetCurrentTarget () SharedType
+crdt method YEvent.GetDelta () []EventOperator
+crdt method YEvent.GetKeys () map[string]EventAction
+crdt method YEvent.GetTarget () SharedType
+crdt method YEvent.Path () []interface{}
+crdt method YMap.AppendKeys ([]string) []string
+crdt method YMap.Clear ()
+crdt method YMap.Clone () *YMap
+crdt method YMap.Delete (string)
+crdt method YMap.Entries () map[string]interface{}
+crdt method YMap.ForEach (func(string, interface{}, *YMap)) Object
+crdt method YMap.Get (string) interface{}
+crdt method YMap.GetSize () Number
+crdt method YMap.Has (string) bool
+crdt method YMap.Keys () []string
+crdt method YMap.Range (func(key string, val interface{}))
+crdt method YMap.Set (string, interface{}) interface{}
+crdt method YMap.ToJson () interface{}
+crdt method YMap.Values () []interface{}
+crdt method YMapEvent.GetChanges () Object
+crdt method YText.ApplyDelta ([]EventOperator, bool)
+crdt method YText.Clone () *YText
+crdt method YText.Delete (Number, Number)
+crdt method YText.Format (Number, Number, Object)
+crdt method YText.GetAttribute (string) interface{}
+crdt method YText.GetAttributes (*Snapshot) Object
+crdt method YText.Insert (Number, string, Object)
+crdt method YText.InsertEmbed (Number, Object, Object)
+crdt method YText.Length () Number
+crdt method YText.RemoveAttribute (string)
+crdt method YText.SetAttribute (string, interface{})
+crdt method YText.ToDelta (*Snapshot, *Snapshot, func(string, *ID) Object) []EventOperator
+crdt method YText.ToJson () interface{}
+crdt method YText.ToString () string
+crdt method YTextEvent.GetDelta () []EventOperator
+crdt method YXmlElement.Clone () *YXmlElement
+crdt method YXmlElement.GetAttribute (string) interface{}
+crdt method YXmlElement.GetAttributes () Object
+crdt method YXmlElement.GetNextSibling () SharedType
+crdt method YXmlElement.GetPrevSibling () SharedType
+crdt method YXmlElement.HasAttribute (string) bool
+crdt method YXmlElement.RemoveAttribute (string)
+crdt method YXmlElement.SetAttribute (string, interface{})
+crdt method YXmlElement.ToDOM ()
+crdt method YXmlElement.ToString () string
+crdt method YXmlFragment.Clone () *YXmlFragment
+crdt method YXmlFragment.CreateTreeWalker (func(SharedType) bool) *YXmlTreeWalker
+crdt method YXmlFragment.Delete (Number, Number)
+crdt method YXmlFragment.Get (Number) interface{}
+crdt method YXmlFragment.GetFirstChild () SharedType
+crdt method YXmlFragment.GetLength () Number
+crdt method YXmlFragment.Insert (Number, ArrayAny)
+crdt method YXmlFragment.InsertAfter (SharedType, ArrayAny)
+crdt method YXmlFragment.Push (ArrayAny)
+crdt method YXmlFragment.QuerySelector (string) SharedType
+crdt method YXmlFragment.QuerySelectorAll (string) []SharedType
+crdt method YXmlFragment.Slice (Number, Number) ArrayAny
+crdt method YXmlFragment.ToArray () ArrayAny
+crdt method YXmlFragment.ToDOM ()
+crdt method YXmlFragment.ToJson () interface{}
+crdt method YXmlFragment.ToString () string
+crdt method YXmlFragment.Unshift (ArrayAny)
+crdt method YXmlText.Clone () *YXmlText
+crdt method YXmlText.GetNextSibling () SharedType
+crdt method YXmlText.GetPreSibling () SharedType
+crdt method YXmlText.ToDOM ()
+crdt method YXmlText.ToJSON () string
+crdt method YXmlText.ToString () string
+crdt method YXmlTreeWalker.Next () SharedType
+crdt method abstractType.GetLength () Number
+crdt method abstractType.Observe (func(interface{}, interface{}))
+crdt method abstractType.ObserveDeep (func(interface{}, interface{}))
+crdt method abstractType.ToJson () interface{}
+crdt method abstractType.Unobserve (func(interface{}, interface{}))
+crdt method abstractType.UnobserveDeep (func(interface{}, interface{}))
+crdt method abstractTypeBase.GetLength () Number
+crdt method abstractTypeBase.Observe (func(interface{}, interface{}))
+crdt method abstractTypeBase.ObserveDeep (func(interface{}, interface{}))
+crdt method abstractTypeBase.ToJson () interface{}
+crdt method abstractTypeBase.Unobserve (func(interface{}, interface{}))
+crdt method abstractTypeBase.UnobserveDeep (func(interface{}, interface{}))
+crdt method clientStructCursor.Next () (clientStructCursor, bool)
+crdt method clientStructCursor.Prev () (clientStructCursor, bool)
+crdt method clientStructCursor.Valid () bool
+crdt method clientStructCursor.Value () abstractStruct
+crdt method clientStructList.Append (abstractStruct) clientStructCursor
+crdt method clientStructList.Find (Number) (clientStructCursor, error)
+crdt method clientStructList.First () (clientStructCursor, bool)
+crdt method clientStructList.InsertAfter (clientStructCursor, abstractStruct) clientStructCursor
+crdt method clientStructList.Last () (clientStructCursor, bool)
+crdt method clientStructList.Len () int
+crdt method clientStructList.Remove (clientStructCursor, clientStructCursor) (clientStructCursor, bool)
+crdt method clientStructList.Replace (clientStructCursor, abstractStruct)
+crdt method clientStructList.Reserve (int)
+crdt method clientStructList.Snapshot ([]abstractStruct) []abstractStruct
+crdt method clientStructTree.Append (abstractStruct) clientStructTreeCursor
+crdt method clientStructTree.At (int) (clientStructTreeCursor, bool)
+crdt method clientStructTree.ChunkFrom (clientStructTreeCursor) clientStructTreeChunkCursor
+crdt method clientStructTree.Find (Number) (clientStructTreeCursor, error)
+crdt method clientStructTree.First () (clientStructTreeCursor, bool)
+crdt method clientStructTree.Index (clientStructTreeCursor) int
+crdt method clientStructTree.InsertAfter (clientStructTreeCursor, abstractStruct) clientStructTreeCursor
+crdt method clientStructTree.Last () (clientStructTreeCursor, bool)
+crdt method clientStructTree.Len () int
+crdt method clientStructTree.Remove (clientStructTreeCursor, clientStructTreeCursor) (clientStructTreeCursor, bool)
+crdt method clientStructTree.Replace (clientStructTreeCursor, abstractStruct)
+crdt method clientStructTree.Snapshot ([]abstractStruct) []abstractStruct
+crdt method clientStructTree.Validate () error
+crdt method clientStructTreeChunkCursor.Next () (clientStructTreeChunkCursor, bool)
+crdt method clientStructTreeChunkCursor.Values () []abstractStruct
+crdt method clientStructTreeCursor.Next () (clientStructTreeCursor, bool)
+crdt method clientStructTreeCursor.Prev () (clientStructTreeCursor, bool)
+crdt method clientStructTreeCursor.Valid () bool
+crdt method clientStructTreeCursor.Value () abstractStruct
+crdt method deltaTextAccumulator.Add (string)
+crdt method deltaTextAccumulator.Empty () bool
+crdt method deltaTextAccumulator.Take () string
+crdt method integrationItemSet.Add (*itemStruct)
+crdt method integrationItemSet.Has (*itemStruct) bool
+crdt method integrationItemSet.Release () map[*itemStruct]struct{}
+crdt method integrationItemSet.Reset ()
+crdt method lazyStructCursor.Err () error
+crdt method lazyStructCursor.Next () abstractStruct
+crdt method lazyStructReaderHeap.Len () int
+crdt method lazyStructReaderHeap.Less (int, int) bool
+crdt method lazyStructReaderHeap.Pop () interface{}
+crdt method lazyStructReaderHeap.Push (interface{})
+crdt method lazyStructReaderHeap.Swap (int, int)
+crdt method noCopy.Lock ()
+crdt method noCopy.Unlock ()
+crdt method numberSlice.Filter (func(number Number) bool) numberSlice
+crdt method numberSlice.Len () int
+crdt method numberSlice.Less (int, int) bool
+crdt method numberSlice.Swap (int, int)
+crdt method remainingLener.RemainingLen () int
+crdt method structDecodeStream.NextBlock () (structDecodeBlock, bool, error)
+crdt method structDecodeStream.NextStruct () (structDecodeResult, bool, error)
+crdt method updateDecoderV1.RemainingLen () int
+crdt method updateDecoderV2.RemainingLen () int
+crdt method xmlType.ToString () string
+crdt method yString.GetLength () Number
+crdt method yString.Observe (func(interface{}, interface{}))
+crdt method yString.ObserveDeep (func(interface{}, interface{}))
+crdt method yString.ToJson () interface{}
+crdt method yString.Unobserve (func(interface{}, interface{}))
+crdt method yString.UnobserveDeep (func(interface{}, interface{}))
+crdt method yXmlHook.ToDOM ()
+crdt method yXmlHook.ToString () string
+crdt type AbsolutePosition struct
+crdt type ArrayAny = []any
+crdt type Awareness struct
+crdt type ChangedSubs map[string]struct{}
+crdt type Doc struct
+crdt type DocOption (*Doc)
+crdt type EventAction struct
+crdt type EventOperator struct
+crdt type EventOperatorKind uint8
+crdt type ID struct
+crdt type IEventType interface
+crdt type ManagedAwareness struct
+crdt type NullType struct
+crdt type Number = int
+crdt type Object struct
+crdt type Observable struct
+crdt type ObserverHandler struct
+crdt type RelativePosition struct
+crdt type Set map[any]bool
+crdt type SharedType interface
+crdt type Snapshot struct
+crdt type StackItem struct
+crdt type Transaction struct
+crdt type TypeConstructor () SharedType
+crdt type UndefinedType struct
+crdt type UndoManager struct
+crdt type YArray struct
+crdt type YArrayEvent struct
+crdt type YEvent struct
+crdt type YMap struct
+crdt type YMapEvent struct
+crdt type YText struct
+crdt type YTextEvent struct
+crdt type YXmlElement struct
+crdt type YXmlEvent struct
+crdt type YXmlFragment struct
+crdt type YXmlText struct
+crdt type YXmlTreeWalker struct
+crdt var ErrMalformedAwarenessState
+crdt var ErrTruncatedAwarenessFrame
+crdt var ErrUnsupportedDataValue
+crdt var Null
+crdt var Undefined
+protocol const MessageAwareness
+protocol const MessagePermissionDenied
+protocol const MessageSync
+protocol const SyncMessageNone
+protocol const SyncMessageStep1
+protocol const SyncMessageStep2
+protocol const SyncMessageUpdate
+protocol field MessageInfo.Body []byte
+protocol field MessageInfo.BodyLength int
+protocol field MessageInfo.FrameLength int
+protocol field MessageInfo.SyncType int
+protocol field MessageInfo.Type uint8
+protocol func DecodeAwarenessMessage ([]byte) (crdt.Number, crdt.Object, error)
+protocol func EncodeAwarenessMessage (crdt.Number, crdt.Object) []byte
+protocol func EncodeAwarenessUpdateMessage ([]byte) []byte
+protocol func EncodeSyncStep1 (*crdt.Doc) []byte
+protocol func EncodeSyncStep2 (*crdt.Doc, []byte) ([]byte, error)
+protocol func EncodeUpdate ([]byte) []byte
+protocol func InspectMessage ([]byte) (MessageInfo, error)
+protocol func NewSyncHandler (*crdt.Doc) *SyncHandler
+protocol func ReadAuthMessage (*bytes.Buffer, *crdt.Doc, func(doc *crdt.Doc, reason string)) error
+protocol func ReadMessage (*bytes.Buffer) (uint8, []byte, error)
+protocol func ResetAllAwarenessClocks ()
+protocol func ResetAwarenessClock (crdt.Number)
+protocol func WriteMessage (*bytes.Buffer, uint8, []byte)
+protocol func WritePermissionDenied (*bytes.Buffer, string) error
+protocol method SyncHandler.Doc () *crdt.Doc
+protocol method SyncHandler.HandleMessage ([]byte, *bytes.Buffer) (uint8, error)
+protocol method SyncHandler.HandleMessageWithOrigin ([]byte, *bytes.Buffer, any) (uint8, error)
+protocol method SyncHandler.RegisterHandler (uint8, MessageHandler)
+protocol method SyncHandler.SetAwareness (*crdt.Awareness)
+protocol type MessageHandler ([]byte) error
+protocol type MessageInfo struct
+protocol type SyncHandler struct
+protocol var ErrEmptyAwareness
+protocol var ErrInvalidMessageType
+protocol var ErrInvalidSyncMessageType
+protocol var ErrMalformedAwarenessState
+protocol var ErrShortMessage

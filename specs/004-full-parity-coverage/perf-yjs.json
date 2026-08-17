@@ -1,0 +1,72 @@
+[
+ {
+  "name": "TextAppendSmall",
+  "nsPerOp": 2855722.9543509274,
+  "iters": 701
+ },
+ {
+  "name": "TextAppendLarge",
+  "nsPerOp": 14891850.311111111,
+  "iters": 135
+ },
+ {
+  "name": "TextInsertRandomSmall",
+  "nsPerOp": 4358549.747276688,
+  "iters": 459
+ },
+ {
+  "name": "TextInsertRandomLarge",
+  "nsPerOp": 26234745.66233766,
+  "iters": 77
+ },
+ {
+  "name": "TextDeleteRandom",
+  "nsPerOp": 44555218.51111111,
+  "iters": 45
+ },
+ {
+  "name": "TextFormatChurn",
+  "nsPerOp": 8277394.975206612,
+  "iters": 242
+ },
+ {
+  "name": "TextToDelta",
+  "nsPerOp": 12819.405098260413,
+  "iters": 156014
+ },
+ {
+  "name": "ArrayInsertSequential",
+  "nsPerOp": 4347328.091106291,
+  "iters": 461
+ },
+ {
+  "name": "MapSet",
+  "nsPerOp": 2911693.5356623,
+  "iters": 687
+ },
+ {
+  "name": "EncodeV1",
+  "nsPerOp": 1306909.6453298498,
+  "iters": 1531
+ },
+ {
+  "name": "EncodeV2",
+  "nsPerOp": 961732.5721153846,
+  "iters": 2080
+ },
+ {
+  "name": "ApplyV1",
+  "nsPerOp": 4249617.834394905,
+  "iters": 471
+ },
+ {
+  "name": "ApplyV2",
+  "nsPerOp": 3104117.2480620155,
+  "iters": 645
+ },
+ {
+  "name": "ConcurrentMerge",
+  "nsPerOp": 6135937.628834356,
+  "iters": 326
+ }
+]

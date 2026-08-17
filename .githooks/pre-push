@@ -1,0 +1,165 @@
+#!/usr/bin/env bash
+#
+# pre-push gate — catches what CI's `oracle` workflow would reject, before you push.
+# Runs from the worktree root.
+#
+#   1. golangci-lint run   (uncapped — the default max-same-issues=3 hides dups)
+#   2. go build ./...       (CI: "build" step)
+#   3. fixed-anchor mutation canaries (catches cumulative drift across commits)
+#   4. ORACLE_REQUIRED=1 go test ./... -count=1   (oracle differentials + full suite)
+#   5. fuzz/run-gate.sh --tier fast --dir both    (every realized cell the registry declares)
+#
+# By DEFAULT step 4 runs WITHOUT -race (≈2-3 min) so the hook is fast enough to
+# actually run on every push. CI is the authoritative -race gate; -race only adds
+# data-race detection (≈5-10x slower) and rarely catches what the non-race run misses.
+#
+# Knobs:
+#   Y_CRDT_RACE=1   git push   # run the full suite WITH -race (mirrors CI exactly, ≈15 min)
+#   Y_CRDT_SKIP_CANARY=1 git push  # skip ONLY the timing tier (use on a loaded host)
+#   Y_CRDT_SKIP_TESTS=1 git push   # lint + build only (skip the test tier)
+#   git push --no-verify           # skip the hook entirely — prefer a narrower knob
+#
+# Activated via `git config core.hooksPath .githooks` (already set for this repo).
+
+set -uo pipefail
+
+# A pure branch deletion (local sha all-zeros) pushes no commits — nothing to gate.
+only_deletes=1
+while read -r _local_ref local_sha _remote_ref _remote_sha; do
+	if [ -n "${local_sha:-}" ] && [ "$local_sha" != "0000000000000000000000000000000000000000" ]; then
+		only_deletes=0
+	fi
+done
+if [ "$only_deletes" = "1" ]; then
+	exit 0
+fi
+
+fail() {
+	echo "" >&2
+	echo "✗ pre-push gate FAILED: $1" >&2
+	echo "  (fix it, or 'git push --no-verify' to bypass)" >&2
+	exit 1
+}
+
+echo "── pre-push gate (mirrors oracle CI) ──────────────────────────────"
+
+# 1. lint — uncapped so every finding is visible (default cap hid 13 of 54 before)
+if ! command -v golangci-lint >/dev/null 2>&1; then
+	fail "golangci-lint not installed (https://golangci-lint.run) — required gate, fail closed"
+fi
+echo "▶ golangci-lint run (uncapped)"
+golangci-lint run --max-same-issues=0 --max-issues-per-linter=0 || fail "golangci-lint"
+
+# 1b. gofmt — golangci-lint's default linter set does NOT include it, and this repo
+# has no .golangci.yml, so formatting drifted to 7 files before anyone noticed. A
+# whitespace-only diff is harmless on its own but makes every later diff noisier.
+echo "▶ gofmt -l ."
+unformatted="$(gofmt -l . 2>/dev/null)"
+if [ -n "$unformatted" ]; then
+	echo "  not gofmt-clean:" >&2
+	echo "$unformatted" | sed 's/^/    /' >&2
+	echo "  fix: gofmt -w \$(gofmt -l .)" >&2
+	fail "gofmt"
+fi
+
+# 2. build (CI's build step)
+echo "▶ go build ./..."
+go build ./... || fail "go build"
+
+# 2b. the mutually-exclusive build variant. The default build EXCLUDES the
+# structstoreoracle-tagged files, so a break there is invisible to everything
+# above — and it has happened twice: once when a rename left the tagged tests
+# using retired spellings, and once when a guard conversion left a dangling
+# variable in a tagged file. `go vet` is enough to catch both and costs seconds;
+# the tagged TEST run is minutes, so CI owns that.
+echo "▶ go vet -tags=structstoreoracle ./..."
+go vet -tags=structstoreoracle ./... || fail "go vet -tags=structstoreoracle"
+
+# 3. mutation canaries. Comparing against HEAD~1 let four individually small
+# slowdowns accumulate to 6-11%; the script owns a fixed pre-StructStore anchor
+# and alternates both arms so host drift cannot consistently favour either one.
+if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ] || [ "${Y_CRDT_SKIP_CANARY:-0}" = "1" ]; then
+	# The canaries are the only TIMING-sensitive step here, so they are the only
+	# one a busy host invalidates. Without a dedicated knob the escape hatch was
+	# `git push --no-verify`, which also drops lint, build, the oracle suite and
+	# the fuzz gate — none of which care about load. That happened three times in
+	# one day, each with a justification that applied only to the canaries.
+	#
+	# Skipping is legitimate when a full exact-SHA battery has just run, or when
+	# the host is loaded enough that a ratio is meaningless. It is not a shortcut:
+	# the anchor comparison is what catches drift that per-commit review misses,
+	# so a skipped canary means the NEXT push carries the comparison for both.
+	echo "⚠ skipping fixed-anchor mutation canaries (timing tier)" >&2
+else
+	echo "▶ fixed-anchor mutation canaries"
+	bash bench/check-mutation-anchor.sh || fail "fixed-anchor mutation canaries"
+fi
+
+# 4. oracle fast tier + full suite
+if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ]; then
+	echo "⚠ Y_CRDT_SKIP_TESTS=1 — skipping the test tier (CI will still run it)" >&2
+else
+	# ORACLE_REQUIRED makes a missing reference impl a hard failure (gate can't pass hollow);
+	# the differentials need fuzz/node_modules, so install if absent (CI does `npm ci`).
+	if [ ! -f fuzz/node_modules/yjs/package.json ]; then
+		echo "▶ fuzz deps missing — npm ci --prefix fuzz (lockfile pins lib0, the reference encoder)"
+		npm ci --prefix fuzz >/dev/null 2>&1 || fail "npm ci (fuzz/ reference impl)"
+	fi
+	# TestFuzzGate is corpus-driven and, under ORACLE_REQUIRED=1, hard-fails when FUZZ_FILE is
+	# unset (it used to skip silently — the hollow-gate hole). Generate the same small
+	# single+concurrent corpora the PR job uses so the hook mirrors CI instead of blocking it.
+	GATE_TMP="$(mktemp -d)"
+	trap 'rm -rf "$GATE_TMP"' EXIT
+	# Export the strict flags BEFORE generating: generate.js keys the emission of
+	# postGcState / snapshot / subdoc fields off them, so a corpus generated without them
+	# fails every case at verification with "corpus lacks postGcState".
+	export ORACLE_REQUIRED=1
+	export FUZZ_STRICT_SUBDOCS=1 FUZZ_STRICT_GC=1 FUZZ_STRICT_SNAPSHOT=1 FUZZ_STRICT_XML=1
+	echo "▶ generating V1/V2 update-gate corpora (single + concurrent)"
+	# Do NOT discard stderr here: the generator reports its emitted=/dropped= health line and
+	# per-seed failures there, and a silently-empty corpus used to pass the gate.
+	node fuzz/generate.js single     1 300 50 > "$GATE_TMP/single.ndjson" \
+		|| fail "generate.js single (fuzz corpus)"
+	node fuzz/generate.js concurrent 1 300 50 > "$GATE_TMP/concurrent.ndjson" \
+		|| fail "generate.js concurrent (fuzz corpus)"
+	[ -s "$GATE_TMP/single.ndjson" ]     || fail "single corpus is EMPTY — the gate would compare nothing"
+	[ -s "$GATE_TMP/concurrent.ndjson" ] || fail "concurrent corpus is EMPTY — the gate would compare nothing"
+	if [ "${Y_CRDT_RACE:-0}" = "1" ]; then
+		echo "▶ ORACLE_REQUIRED=1 go test ./... -race -count=1 -timeout 30m  (full CI mirror, slow)"
+		FUZZ_MODE=single FUZZ_FILE="$GATE_TMP/single.ndjson" \
+			go test ./... -race -count=1 -timeout 30m || fail "go test -race (oracle gate)"
+		echo "▶ convergence invariant (concurrent mode)"
+		FUZZ_MODE=concurrent FUZZ_FILE="$GATE_TMP/concurrent.ndjson" \
+			go test -run TestFuzzGate -race -count=1 -timeout 20m ./crdt || fail "go test -race (convergence)"
+	else
+		echo "▶ ORACLE_REQUIRED=1 go test ./... -count=1 -timeout 12m  (no -race; set Y_CRDT_RACE=1 to mirror CI)"
+		FUZZ_MODE=single FUZZ_FILE="$GATE_TMP/single.ndjson" \
+			go test ./... -count=1 -timeout 12m || fail "go test (oracle gate)"
+		echo "▶ convergence invariant (concurrent mode)"
+		FUZZ_MODE=concurrent FUZZ_FILE="$GATE_TMP/concurrent.ndjson" \
+			go test -run TestFuzzGate -count=1 -timeout 10m ./crdt || fail "go test (convergence)"
+	fi
+fi
+
+# 5. oracle FAST tier through the registry-derived entrypoint (T071).
+# The hook previously ran only the hand-listed corpora above, so a newly registered surface was
+# gated in CI but not before push. Going through run-gate.sh means the hook covers whatever the
+# registry realizes — including direction B — without a matching hook edit. Roughly 25s.
+if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ]; then
+	echo "⚠ Y_CRDT_SKIP_TESTS=1 — skipping the oracle fast tier too" >&2
+else
+	echo "▶ oracle fast tier (all realized cells, both directions)"
+	# Same registry-derived membership assertion CI makes (T070): a realized cell that is not in
+	# the fast tier would run nightly only, which is exactly how feature 003 stayed green.
+	all_cells="$(go run ./internal/oracle/cmd/surfaces -cells | sort)"
+	fast_cells="$(go run ./internal/oracle/cmd/surfaces -cells -tier fast | sort)"
+	if [ "$all_cells" != "$fast_cells" ]; then
+		echo "  realized cells not in the fast tier:" >&2
+		comm -23 <(echo "$all_cells") <(echo "$fast_cells") >&2
+		fail "a realized (surface,direction) cell is missing from the fast tier"
+	fi
+	bash fuzz/run-gate.sh --tier fast --dir both || fail "oracle fast tier"
+fi
+
+echo "✓ pre-push gate passed"
+exit 0

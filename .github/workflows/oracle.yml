@@ -1,0 +1,230 @@
+name: oracle
+
+# The differential oracle is the enforced correctness gate (replaces sampling review). On every PR
+# the fast tier runs inside `go test` (the native-op differentials auto-generate fresh corpora via
+# the pinned yjs); a nightly job runs the ≥1e6-seed scale tier. Node + `yjs@13.6.31` MUST be
+# installed before `go test`, else the differentials skip (graceful) and the gate would be hollow.
+
+on:
+  pull_request:
+  push:
+    branches: [main, "004-full-parity-coverage"]
+  schedule:
+    - cron: "0 3 * * *" # nightly scale tier
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    name: golangci-lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          # Must match go.mod and the toolchain the allocation ceilings were
+          # calibrated on. Several guards assert exact allocation counts, and those
+          # counts move with the compiler: the merge-scheduler ceiling reads ~5,660
+          # on 1.26 and 6,433 on 1.24, so running CI on a different version than we
+          # develop on turned a real guard into a permanent red.
+          go-version: "1.26.x"
+      # CLAUDE.md mandates golangci-lint; it now gates in CI too (not just locally /
+      # the .githooks/pre-push hook). Pinned to the version run locally; uncapped so
+      # every finding shows (the default max-same-issues=3 hid 13 of 54 in review).
+      - uses: golangci/golangci-lint-action@4afd733a84b1f43292c63897423277bb7f4313a9 # v8
+        with:
+          version: v2.12.2
+          args: --max-same-issues=0 --max-issues-per-linter=0
+
+  gate:
+    name: oracle gate (fast tier + -race)
+    # Fast tier on every PR and on merge; the scheduled run goes straight to the scale tier
+    # instead of paying for the fast tier again.
+    if: github.event_name != 'schedule'
+    runs-on: ubuntu-latest
+    # -race instruments the whole suite (oracle differentials + fuzz/OOM guards) ~5-10x slower;
+    # it exceeds go test's 600s default. timeout-minutes is the backstop ABOVE the -timeout below,
+    # so the test's own timeout fires first (clean goroutine dump) rather than a hard job kill.
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "lts/*"
+      - name: install yjs reference (oracle's reference side)
+        # `npm ci` (NOT `npm install`): the committed fuzz/package-lock.json is what actually
+        # pins the reference. yjs@13.6.31 depends on `lib0: ^0.2.99`, and lib0 is the encoder
+        # every byte-exact comparison is made against — with `npm install` and no lockfile,
+        # each run resolved whatever lib0 the caret range allowed, so a lib0 release could
+        # silently redefine the oracle's ground truth.
+        run: cd fuzz && npm ci
+      - name: build
+        run: go build ./...
+      - name: assert the fast tier covers EVERY realized cell (T070, SC-001a)
+        # Feature 003's gate was green while whole surfaces had no differential at all. The
+        # in-code invariant (T009) rejects registering a cell that omits the fast tier; this is
+        # the CI half, and it is deliberately a DIFFERENT question: not "does the registry allow
+        # it" but "does the tier the PR actually runs cover everything the registry realizes".
+        # Both derive from the registry, so neither can drift into a hand-maintained list.
+        run: |
+          go run ./internal/oracle/cmd/surfaces -cells            | sort > /tmp/cells.all
+          go run ./internal/oracle/cmd/surfaces -cells -tier fast | sort > /tmp/cells.fast
+          if ! diff -u /tmp/cells.all /tmp/cells.fast; then
+            echo "::error::a realized (surface,direction) cell is NOT in the fast tier —" \
+                 "it would only ever run nightly, which is the feature-003 failure mode"
+            exit 1
+          fi
+          echo "fast tier covers all $(wc -l < /tmp/cells.all) realized cells"
+          # A registry with nothing pending is what makes the check meaningful; report it either way.
+          PENDING="$(go run ./internal/oracle/cmd/surfaces -pending)"
+          [ -z "$PENDING" ] && echo "no canonical surface is unregistered" \
+                            || echo "::warning::canonical surfaces without generators: $PENDING"
+      - name: generate V1/V2 update-gate corpora (PR tier)
+        # TestFuzzGate is corpus-driven (FUZZ_FILE) and covers the V1/V2 apply paths + the
+        # convergence invariant (SC-003: `concurrent` replays 6 permuted apply orders). It used
+        # to skip here, so the PR job enforced only the native-op differentials and convergence
+        # was nightly-only. Small case counts keep the PR tier fast; the nightly `scale` job
+        # runs the same modes at 20k.
+        #
+        # The FUZZ_STRICT_* flags MUST be set for GENERATION as well as verification: generate.js
+        # keys the emission of postGcState / snapshot / subdoc fields off them, so generating
+        # without them and verifying with them fails every case with "corpus lacks postGcState".
+        env:
+          FUZZ_STRICT_SUBDOCS: "1"
+          FUZZ_STRICT_GC: "1"
+          FUZZ_STRICT_SNAPSHOT: "1"
+          FUZZ_STRICT_XML: "1"
+        run: |
+          node fuzz/generate.js single     1 300 50 > "$RUNNER_TEMP/single.ndjson"
+          node fuzz/generate.js concurrent 1 300 50 > "$RUNNER_TEMP/concurrent.ndjson"
+          # A silently-empty corpus used to pass the gate green (cases=0). TestFuzzGate now
+          # fails on cases==0; assert here too so the failure names the real cause.
+          [ -s "$RUNNER_TEMP/single.ndjson" ]     || { echo "::error::single corpus is EMPTY"; exit 1; }
+          [ -s "$RUNNER_TEMP/concurrent.ndjson" ] || { echo "::error::concurrent corpus is EMPTY"; exit 1; }
+      - name: oracle fast tier + full suite (race)
+        # `go test` runs the seven native-op differentials (auto-generated corpora, including the
+        # observer-event projection and merged-update-bytes surfaces) + the untrusted-entry-point
+        # panic sweep + the
+        # fault-injection self-test (oracle teeth) + the V1/V2 update gate (single) + the
+        # unit/compat suite, under -race. ORACLE_REQUIRED=1 makes a missing Node / failed
+        # generator / absent FUZZ_FILE a hard FAILURE, not a skip — so the gate cannot pass
+        # "hollow" (green while the differentials silently didn't run).
+        env:
+          ORACLE_REQUIRED: "1"
+          FUZZ_MODE: single
+          FUZZ_STRICT_SUBDOCS: "1"
+          FUZZ_STRICT_GC: "1"
+          FUZZ_STRICT_SNAPSHOT: "1"
+          FUZZ_STRICT_XML: "1"
+        run: |
+          FUZZ_FILE="$RUNNER_TEMP/single.ndjson" go test ./... -race -count=1 -timeout 30m
+      - name: oracle FAST tier through the registry-derived entrypoint (all cells, both directions)
+        # The PR gate previously ran only the hand-listed differentials above. This runs the tier
+        # the registry defines — every realized cell, direction A and B — so adding a surface adds
+        # it to the PR gate automatically instead of requiring a matching workflow edit (T069).
+        env:
+          ORACLE_REQUIRED: "1"
+          FUZZ_STRICT_SUBDOCS: "1"
+          FUZZ_STRICT_GC: "1"
+          FUZZ_STRICT_SNAPSHOT: "1"
+          FUZZ_STRICT_XML: "1"
+        run: bash fuzz/run-gate.sh --tier fast --dir both
+      - name: convergence invariant (concurrent mode, SC-003)
+        # Second pass: TestFuzzGate reads ONE corpus+mode per run, so `concurrent` needs its own
+        # invocation. This is the permuted-apply-order convergence check (FR-007/C-O6).
+        env:
+          ORACLE_REQUIRED: "1"
+          FUZZ_MODE: concurrent
+          FUZZ_STRICT_SUBDOCS: "1"
+          FUZZ_STRICT_GC: "1"
+          FUZZ_STRICT_SNAPSHOT: "1"
+          FUZZ_STRICT_XML: "1"
+        run: |
+          FUZZ_FILE="$RUNNER_TEMP/concurrent.ndjson" go test -run TestFuzzGate -race -count=1 -timeout 20m ./crdt
+
+  full:
+    name: oracle full tier (merge gate)
+    # T069: the three tiers are fast on every PR, FULL on merge to the mainline, scale on schedule.
+    # Before this the workflow had only two — a PR tier and a nightly scale tier — so nothing ran
+    # between "every PR" and "once a night". A regression merged to main was invisible until the
+    # nightly job, and the tier the spec calls the acceptance gate did not exist in CI at all.
+    if: github.event_name == 'push'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "lts/*"
+      - name: install yjs reference
+        run: cd fuzz && npm ci
+      - name: oracle full tier (all realized cells, both directions)
+        env:
+          ORACLE_REQUIRED: "1"
+          FUZZ_STRICT_SUBDOCS: "1"
+          FUZZ_STRICT_GC: "1"
+          FUZZ_STRICT_SNAPSHOT: "1"
+          FUZZ_STRICT_XML: "1"
+        run: bash fuzz/run-gate.sh --tier full --dir both
+
+  scale:
+    name: oracle scale tier (>=1e6 seeds)
+    if: github.event_name == 'schedule'
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5 # v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version: "1.26.x"
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: "lts/*"
+      - name: install yjs reference
+        # npm ci — see the gate job: the lockfile is what pins lib0, the reference encoder.
+        run: cd fuzz && npm ci
+      - name: native-op oracle @ scale (>=1e6 seeds aggregate, all surfaces)
+        run: |
+          node fuzz/native_diff_delta.mjs 1 300000 > "$RUNNER_TEMP/d.ndjson"
+          node fuzz/native_diff_gen.mjs        1 200000 16 > "$RUNNER_TEMP/t.ndjson"
+          node fuzz/native_diff_arr.mjs        1 200000 > "$RUNNER_TEMP/a.ndjson"
+          node fuzz/native_diff_map.mjs        1 200000 > "$RUNNER_TEMP/m.ndjson"
+          node fuzz/native_diff_xml.mjs        1 200000 > "$RUNNER_TEMP/x.ndjson"
+          FUZZ_DELTA_FILE="$RUNNER_TEMP/d.ndjson" FUZZ_NATIVE_FILE="$RUNNER_TEMP/t.ndjson" \
+          FUZZ_ARR_FILE="$RUNNER_TEMP/a.ndjson" FUZZ_MAP_FILE="$RUNNER_TEMP/m.ndjson" \
+          FUZZ_XML_FILE="$RUNNER_TEMP/x.ndjson" \
+            go test -run 'TestNative(OpDiff|ArrayDiff|MapDiff|XmlDiff|DeltaDiff)' -count=1 -timeout 80m ./crdt
+      - name: scale tier through the entrypoint (enforces the per-cell seed floor, T071b/SC-001)
+        # Routing scale through run-gate.sh is what makes SC-001's >=10,000-seeds-per-realized-cell
+        # floor an enforced property: the entrypoint asks the registry for the floor and fails the
+        # run when the selected volume would not meet it. Run directly, as the hand-written node
+        # invocations above are, the floor was only ever prose in the spec.
+        env:
+          ORACLE_REQUIRED: "1"
+          FUZZ_STRICT_SUBDOCS: "1"
+          FUZZ_STRICT_GC: "1"
+          FUZZ_STRICT_SNAPSHOT: "1"
+          FUZZ_STRICT_XML: "1"
+        run: bash fuzz/run-gate.sh --tier scale --dir both
+      - name: V1/V2 update gate @ scale (single + concurrent, strict surfaces)
+        # Pinned T015 CLI contract: `run-gate.sh [--seeds N] [--surface ...] [--dir A|B|both]`.
+        # --surface update covers the V1/V2 apply paths + the convergence invariant; the
+        # FUZZ_STRICT_* flags add the subdoc/gc/snapshot/xml assertions.
+        run: |
+          FUZZ_STRICT_SUBDOCS=1 FUZZ_STRICT_GC=1 FUZZ_STRICT_SNAPSHOT=1 FUZZ_STRICT_XML=1 \
+            bash fuzz/run-gate.sh --seeds 20000 --surface update --dir A
