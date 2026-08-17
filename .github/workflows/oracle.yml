@@ -8,7 +8,7 @@ name: oracle
 on:
   pull_request:
   push:
-    branches: [main, "004-full-parity-coverage"]
+    branches: [main]
   schedule:
     - cron: "0 3 * * *" # nightly scale tier
 
