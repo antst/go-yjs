@@ -58,7 +58,13 @@ jobs:
           go-version: "1.26.x"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "lts/*"
+          # PINNED, not "lts/*". We pin yjs@13.6.31 exactly and then have to run it
+          # on something; leaving the runtime floating means the reference
+          # implementation executes on a different engine whenever Node's LTS
+          # moves, with nothing recording that it changed. 24 matches the Node in
+          # the Forgejo CI container, so both gates run the reference on the same
+          # major.
+          node-version: "24"
       - name: install yjs reference (oracle's reference side)
         # `npm ci` (NOT `npm install`): the committed fuzz/package-lock.json is what actually
         # pins the reference. yjs@13.6.31 depends on `lib0: ^0.2.99`, and lib0 is the encoder
@@ -168,7 +174,13 @@ jobs:
           go-version: "1.26.x"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "lts/*"
+          # PINNED, not "lts/*". We pin yjs@13.6.31 exactly and then have to run it
+          # on something; leaving the runtime floating means the reference
+          # implementation executes on a different engine whenever Node's LTS
+          # moves, with nothing recording that it changed. 24 matches the Node in
+          # the Forgejo CI container, so both gates run the reference on the same
+          # major.
+          node-version: "24"
       - name: install yjs reference
         run: cd fuzz && npm ci
       - name: oracle full tier (all realized cells, both directions)
@@ -194,7 +206,13 @@ jobs:
           go-version: "1.26.x"
       - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
         with:
-          node-version: "lts/*"
+          # PINNED, not "lts/*". We pin yjs@13.6.31 exactly and then have to run it
+          # on something; leaving the runtime floating means the reference
+          # implementation executes on a different engine whenever Node's LTS
+          # moves, with nothing recording that it changed. 24 matches the Node in
+          # the Forgejo CI container, so both gates run the reference on the same
+          # major.
+          node-version: "24"
       - name: install yjs reference
         # npm ci — see the gate job: the lockfile is what pins lib0, the reference encoder.
         run: cd fuzz && npm ci
