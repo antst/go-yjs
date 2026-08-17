@@ -426,7 +426,6 @@ crdt method YXmlElement.GetPrevSibling () SharedType
 crdt method YXmlElement.HasAttribute (string) bool
 crdt method YXmlElement.RemoveAttribute (string)
 crdt method YXmlElement.SetAttribute (string, interface{})
-crdt method YXmlElement.ToDOM ()
 crdt method YXmlElement.ToString () string
 crdt method YXmlFragment.Clone () *YXmlFragment
 crdt method YXmlFragment.CreateTreeWalker (func(SharedType) bool) *YXmlTreeWalker
@@ -441,14 +440,12 @@ crdt method YXmlFragment.QuerySelector (string) SharedType
 crdt method YXmlFragment.QuerySelectorAll (string) []SharedType
 crdt method YXmlFragment.Slice (Number, Number) ArrayAny
 crdt method YXmlFragment.ToArray () ArrayAny
-crdt method YXmlFragment.ToDOM ()
 crdt method YXmlFragment.ToJson () interface{}
 crdt method YXmlFragment.ToString () string
 crdt method YXmlFragment.Unshift (ArrayAny)
 crdt method YXmlText.Clone () *YXmlText
 crdt method YXmlText.GetNextSibling () SharedType
 crdt method YXmlText.GetPreSibling () SharedType
-crdt method YXmlText.ToDOM ()
 crdt method YXmlText.ToJSON () string
 crdt method YXmlText.ToString () string
 crdt method YXmlTreeWalker.Next () SharedType
@@ -529,7 +526,6 @@ crdt method yString.ObserveDeep (func(interface{}, interface{}))
 crdt method yString.ToJson () interface{}
 crdt method yString.Unobserve (func(interface{}, interface{}))
 crdt method yString.UnobserveDeep (func(interface{}, interface{}))
-crdt method yXmlHook.ToDOM ()
 crdt method yXmlHook.ToString () string
 crdt type AbsolutePosition struct
 crdt type ArrayAny = []any
