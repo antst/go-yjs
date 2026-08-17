@@ -59,6 +59,26 @@ prove_mutation band-immutability \
 	$'\ttrue ||' \
 	'second calibration unexpectedly replaced a declared band'
 
+prove_mutation clean-provenance \
+	$'\t[ -z "$status" ] ||' \
+	$'\ttrue ||' \
+	'dirty worktree unexpectedly declared a benchmark band'
+
+prove_mutation predictive-dispersion \
+	'readonly MAD_NORMAL_SCALE=1.4826' \
+	'readonly MAD_NORMAL_SCALE=0' \
+	'calibration band did not use fresh-process dispersion'
+
+prove_mutation scale-uncertainty \
+	$'\t\t\telse student = z + (z^3 + z) / (4 * df) + (5 * z^5 + 16 * z^3 + 3 * z) / (96 * df^2) + (3 * z^7 + 19 * z^5 + 17 * z^3 - 15 * z) / (384 * df^3)' \
+	$'\t\t\telse student = z' \
+	'calibration band did not use fresh-process dispersion'
+
+prove_mutation zero-dispersion \
+	$'\t[ "$mad" -gt 0 ] ||' \
+	$'\ttrue ||' \
+	'zero-dispersion calibration unexpectedly declared a band'
+
 prove_mutation band-integrity \
 	$'\t\t[ "$band_integrity" = pass ] && [ "$telemetry_coverage" = pass ]; then' \
 	$'\t\ttrue && [ "$telemetry_coverage" = pass ]; then' \
@@ -77,7 +97,12 @@ prove_mutation pre-canary-band \
 prove_mutation post-canary-band \
 	$'\tif [ "$pre_decision" = pass ] && [ "$post_decision" = pass ] &&' \
 	$'\tif [ "$pre_decision" = pass ] && true &&' \
-	'out-of-band post-canary unexpectedly produced an accepted verdict'
+	'canary beyond the declared sensitivity unexpectedly passed'
+
+prove_mutation endpoint-drift \
+	$'\t\t[ "$endpoint_drift_decision" = pass ] &&' \
+	$'\t\ttrue &&' \
+	'endpoint drift beyond the paired band unexpectedly passed'
 
 prove_mutation sampler-liveness \
 	$'\t\t[ "$collector_status" = 0 ] && [ "$telemetry_status" = complete ] &&' \

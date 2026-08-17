@@ -11,10 +11,14 @@
 # `collect` refuses to recompute that band: it reads the recorded criterion,
 # starts mpstat and PSI before the pre-canary, and stops them only after the
 # post-canary. `evaluate` reads the same immutable band and the raw canaries.
-# Separating declaration from observation is what makes median-only acceptance
-# a predeclared criterion rather than a rule chosen after seeing the samples.
+# Separating declaration from observation is what makes grouped-median endpoint
+# and paired-drift acceptance predeclared criteria rather than rules chosen
+# after seeing the samples.
 #
-# CPU set, process/sample counts, tolerance and telemetry interval are inputs.
+# CPU set, process/sample counts and telemetry interval are inputs. The band is
+# derived from dispersion between fresh-process medians, not from a fixed
+# tolerance: pooled samples would pretend measurements in one process are
+# independent observations of process-to-process host noise.
 # Pass `--cpus unpinned` deliberately for an unpinned run. Reference columns may
 # be reused only when their recorded calibration agrees:
 #
@@ -28,10 +32,16 @@
 # bracketed comparison without its other half.
 set -euo pipefail
 
-readonly HERE="$(cd "$(dirname "$0")" && pwd)"
+readonly HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 readonly ROOT="$(cd "$HERE/.." && pwd)"
-readonly BAND_FORMAT="y-crdt-benchmark-bracket-v1"
+readonly BAND_FORMAT="y-crdt-benchmark-bracket-v2"
 readonly BAND_NAME="bracket-band.txt"
+readonly BAND_METHOD="fresh-process-group-median-mad-student-t-99pct"
+readonly ACCEPTANCE_RULE="grouped-medians-plus-paired-drift"
+readonly PREDICTION_LEVEL_PERCENT=99
+readonly PREDICTION_Z=2.5758293035489004
+readonly MAD_NORMAL_SCALE=1.4826
+readonly PI=3.141592653589793
 
 die() {
 	echo "error: $*" >&2
@@ -47,9 +57,9 @@ usage:
 
 calibrate options:
   --cpus LIST                  taskset CPU list, or the literal "unpinned"
-  --processes N                fresh calibration processes (default 3)
-  --samples N                  samples per process and canary (default 5)
-  --tolerance-percent PCT      median band tolerance (default 5)
+  --processes N                odd fresh calibration processes >=9 (default 9)
+  --canary-processes K         odd fresh processes per endpoint >=9 (default 9)
+  --samples N                  odd samples per process and canary (default 11)
   --telemetry-interval SEC     mpstat/PSI interval (default 10)
   --pressure-dir DIR           PSI directory (default /sys/fs/cgroup)
   --reference MEDIAN:LOW:HIGH  optional reusable-reference calibration
@@ -57,6 +67,7 @@ calibrate options:
 Environment:
   LEGS                         passed through to run-all.sh (default all four)
   BRACKET_GO                   Go command, used by the protocol self-test
+  BRACKET_GIT                  Git command, used by the protocol self-test
   BRACKET_MPSTAT               mpstat command, used by the protocol self-test
   BRACKET_RUN_ALL              collector path, used by the protocol self-test
 EOF
@@ -83,12 +94,20 @@ require_nonnegative_number() {
 		die "$label must be a non-negative number (got '$value')"
 }
 
-require_percentage() {
+require_odd_at_least_three() {
 	local label="$1"
 	local value="$2"
-	require_nonnegative_number "$label" "$value"
-	awk -v value="$value" 'BEGIN { exit !(value <= 100) }' ||
-		die "$label must not exceed 100 (got '$value')"
+	require_positive_integer "$label" "$value"
+	[ "$value" -ge 3 ] && [ $((value % 2)) -eq 1 ] ||
+		die "$label must be an odd integer of at least 3 (got '$value')"
+}
+
+require_odd_at_least_nine() {
+	local label="$1"
+	local value="$2"
+	require_positive_integer "$label" "$value"
+	[ "$value" -ge 9 ] && [ $((value % 2)) -eq 1 ] ||
+		die "$label must be an odd integer of at least 9 (got '$value')"
 }
 
 band_value() {
@@ -96,6 +115,18 @@ band_value() {
 	local band="$2"
 	awk -v key="$key" 'index($0, key ": ") == 1 { print substr($0, length(key) + 3); found++ }
 		END { if (found != 1) exit 1 }' "$band"
+}
+
+repo_git() {
+	"${BRACKET_GIT:-git}" -C "$ROOT" "$@"
+}
+
+require_clean_worktree() {
+	local status
+	status="$(repo_git status --porcelain=v1 --untracked-files=normal)" ||
+		die "cannot inspect the repository worktree"
+	[ -z "$status" ] ||
+		die "benchmark provenance requires a clean worktree; commit or remove every tracked and untracked change first"
 }
 
 record_event() {
@@ -164,11 +195,109 @@ sample_median() {
 	median_from_sorted "$scratch"
 }
 
-sample_median_if_complete() {
+# Derive a predictive interval for a future median of fresh-process medians.
+# MAD is normalised by 1.4826. A Student-t-like quantile with processes-1
+# degrees of freedom accounts for uncertainty in the estimated scale; treating
+# MAD from nine observations as known would make an accidentally small MAD
+# produce the same false rejections this protocol is intended to prevent. The
+# sqrt term separately accounts for uncertainty in the calibration center.
+#
+# The inputs here are medians, whose distribution is appreciably nearer normal
+# than the right-skewed raw timings. "Robust" describes the center and scale
+# estimators, not a claim that this symmetric interval is distribution-free.
+# Every approximation and factor is recorded in the immutable band.
+derive_predictive_band() {
+	local process_medians="$1"
+	local processes="$2"
+	local canary_processes="$3"
+	local scratch="$4"
+	local actual center mad
+	actual="$(wc -l <"$process_medians" | tr -d ' ')"
+	[ "$actual" = "$processes" ] ||
+		die "$process_medians contains $actual process medians, want $processes"
+	sort -n "$process_medians" >"$scratch/process-medians.sorted"
+	center="$(median_from_sorted "$scratch/process-medians.sorted")"
+	awk -v center="$center" '{ delta = $1 - center; if (delta < 0) delta = -delta; print delta }' \
+		"$process_medians" | sort -n >"$scratch/process-median-deviations.sorted"
+	mad="$(median_from_sorted "$scratch/process-median-deviations.sorted")"
+	[ "$mad" -gt 0 ] ||
+		die "calibration process medians have zero MAD; cannot estimate a predictive band"
+	awk -v center="$center" -v mad="$mad" -v processes="$processes" -v canaryProcesses="$canary_processes" \
+		-v scale="$MAD_NORMAL_SCALE" -v z="$PREDICTION_Z" -v pi="$PI" '
+		BEGIN {
+			df = processes - 1
+			# Exact lower-df quantiles keep historical 3x5 characterisation
+			# meaningful. Production requires df>=8, where this order-three
+			# Cornish-Fisher expansion is within 0.1% of t(0.995, df).
+			if (df == 2) student = 9.924843200918070
+			else if (df == 4) student = 4.604094871415897
+			else if (df == 6) student = 3.707428021324907
+			else student = z + (z^3 + z) / (4 * df) + (5 * z^5 + 16 * z^3 + 3 * z) / (96 * df^2) + (3 * z^7 + 19 * z^5 + 17 * z^3 - 15 * z) / (384 * df^3)
+			normalized = scale * mad
+			scaleInflation = student / z
+			# Both endpoints are medians of canaryProcesses fresh-process
+			# medians. Their variance shrinks with k just as the calibration
+			# center shrinks with n; a single-process canary would leave a
+			# full sigma^2 floor no amount of calibration could reduce.
+			centerFactor = sqrt(pi / (2 * canaryProcesses) + pi / (2 * processes))
+			totalMultiplier = student * centerFactor
+			width = normalized * totalMultiplier
+			driftMultiplier = student * sqrt(pi / canaryProcesses)
+			driftWidth = normalized * driftMultiplier
+			half = int(width)
+			if (half < width) half++
+			driftHalf = int(driftWidth)
+			if (driftHalf < driftWidth) driftHalf++
+			lower = center - half
+			if (lower < 0) lower = 0
+			upper = center + half
+			printf "%.0f %.0f %.3f %.0f %.9f %.6f %.6f %.6f %.6f %.0f %.0f %.0f %.0f\n",
+				center, mad, normalized, df, student, scaleInflation,
+				centerFactor, totalMultiplier, driftMultiplier, half, driftHalf, lower, upper
+		}'
+}
+
+run_mapset_group() {
+	local cpus="$1"
+	local processes="$2"
+	local samples="$3"
+	local destination="$4"
+	local process_medians="$5"
+	local round_raw="${destination}.round.tmp"
+	local round_sorted="${destination}.round-sorted.tmp"
+	: >"$destination"
+	: >"$process_medians"
+	for ((round = 1; round <= processes; round++)); do
+		printf '== process %d ==\n' "$round" >>"$destination"
+		local round_status=0
+		run_mapset "$cpus" "$samples" "$round_raw" || round_status=$?
+		if [ "$round_status" != 0 ]; then
+			rm -f "$round_raw" "$round_sorted"
+			return "$round_status"
+		fi
+		cat "$round_raw" >>"$destination"
+		sample_median "$round_raw" "$samples" "$round_sorted" >>"$process_medians"
+	done
+	rm -f "$round_raw" "$round_sorted"
+}
+
+recorded_process_median() {
 	local source="$1"
 	local expected="$2"
 	local scratch="$3"
-	extract_mapset_ns "$source" | sort -n >"$scratch" || return 1
+	awk '/^[0-9]+([.][0-9]+)?$/ { print; next } { exit 2 }' "$source" | sort -n >"$scratch"
+	local actual
+	actual="$(wc -l <"$scratch" | tr -d ' ')"
+	[ "$actual" = "$expected" ] ||
+		die "$source contains $actual process medians, want $expected"
+	median_from_sorted "$scratch"
+}
+
+recorded_process_median_if_complete() {
+	local source="$1"
+	local expected="$2"
+	local scratch="$3"
+	awk '/^[0-9]+([.][0-9]+)?$/ { print; next } { exit 2 }' "$source" | sort -n >"$scratch" || return 1
 	local actual
 	actual="$(wc -l <"$scratch" | tr -d ' ')"
 	[ "$actual" = "$expected" ] || return 1
@@ -198,9 +327,9 @@ calibrate() {
 	local out="$1"
 	shift
 	local cpus=""
-	local processes=3
-	local samples=5
-	local tolerance=5
+	local processes=9
+	local canary_processes=9
+	local samples=11
 	local telemetry_interval=10
 	local pressure_dir=/sys/fs/cgroup
 	local reference=""
@@ -208,13 +337,13 @@ calibrate() {
 
 	while [ "$#" -gt 0 ]; do
 		case "$1" in
-		--cpus | --processes | --samples | --tolerance-percent | --telemetry-interval | --pressure-dir | --reference)
+		--cpus | --processes | --canary-processes | --samples | --telemetry-interval | --pressure-dir | --reference)
 			[ "$#" -ge 2 ] || die "$1 requires a value"
 			case "$1" in
 			--cpus) cpus="$2" ;;
 			--processes) processes="$2" ;;
+			--canary-processes) canary_processes="$2" ;;
 			--samples) samples="$2" ;;
-			--tolerance-percent) tolerance="$2" ;;
 			--telemetry-interval) telemetry_interval="$2" ;;
 			--pressure-dir) pressure_dir="$2" ;;
 			--reference) reference="$2" ;;
@@ -226,9 +355,10 @@ calibrate() {
 	done
 
 	[ -n "$cpus" ] || die "--cpus is required (use --cpus unpinned deliberately)"
-	require_positive_integer "--processes" "$processes"
-	require_positive_integer "--samples" "$samples"
-	require_percentage "--tolerance-percent" "$tolerance"
+	require_clean_worktree
+	require_odd_at_least_nine "--processes" "$processes"
+	require_odd_at_least_nine "--canary-processes" "$canary_processes"
+	require_odd_at_least_three "--samples" "$samples"
 	require_positive_integer "--telemetry-interval" "$telemetry_interval"
 	command -v "$go_command" >/dev/null 2>&1 || die "Go command not found"
 	if [ "$cpus" != "unpinned" ]; then
@@ -262,13 +392,11 @@ calibrate() {
 	scratch="$(mktemp -d "${TMPDIR:-/tmp}/y-crdt-bracket-calibrate.XXXXXX")"
 	trap 'rm -rf "${scratch:-}"' EXIT
 	local raw="$scratch/calibration-mapset.txt"
+	local process_medians="$scratch/calibration-process-medians-ns.txt"
 	: >"$raw"
-	record_event "$out_abs" "calibration-start cpus=$cpus processes=$processes samples=$samples"
-	for ((round = 1; round <= processes; round++)); do
-		printf '== round %d ==\n' "$round" >>"$raw"
-		run_mapset "$cpus" "$samples" "$scratch/round.txt"
-		cat "$scratch/round.txt" >>"$raw"
-	done
+	: >"$process_medians"
+	record_event "$out_abs" "calibration-start cpus=$cpus processes=$processes canary_processes=$canary_processes samples=$samples"
+	run_mapset_group "$cpus" "$processes" "$samples" "$raw" "$process_medians"
 
 	local sorted="$scratch/calibration-mapset-sorted-ns.txt"
 	extract_mapset_ns "$raw" | sort -n >"$sorted"
@@ -277,12 +405,12 @@ calibrate() {
 	actual="$(wc -l <"$sorted" | tr -d ' ')"
 	[ "$actual" = "$expected" ] ||
 		die "calibration produced $actual MapSet samples, want $expected"
-	local median lower upper
-	median="$(median_from_sorted "$sorted")"
-	lower="$(awk -v median="$median" -v tolerance="$tolerance" \
-		'BEGIN { printf "%.0f", median * (1 - tolerance / 100) }')"
-	upper="$(awk -v median="$median" -v tolerance="$tolerance" \
-		'BEGIN { printf "%.0f", median * (1 + tolerance / 100) }')"
+	local median mad normalized_scale scale_df student_quantile scale_inflation
+	local center_factor total_multiplier drift_multiplier halfwidth drift_halfwidth lower upper
+	read -r median mad normalized_scale scale_df student_quantile scale_inflation \
+		center_factor total_multiplier drift_multiplier halfwidth drift_halfwidth lower upper < <(
+		derive_predictive_band "$process_medians" "$processes" "$canary_processes" "$scratch"
+	)
 
 	local reference_decision=not-requested
 	if [ -n "$reference" ]; then
@@ -300,21 +428,37 @@ calibrate() {
 	{
 		echo "format: $BAND_FORMAT"
 		echo "declared_at: $(utc_now)"
-		echo "commit: $(git -C "$ROOT" rev-parse HEAD)"
+		echo "commit: $(repo_git rev-parse HEAD)"
 		echo "hostname: $(hostname 2>/dev/null || echo unknown)"
 		echo "host: $(uname -a 2>/dev/null || echo unknown)"
 		echo "go_version: $("$go_command" version 2>/dev/null || echo unknown)"
 		echo "cpu_model: $cpu_model"
 		echo "cpus: $cpus"
 		echo "calibration_processes: $processes"
+		echo "canary_processes: $canary_processes"
 		echo "samples_per_process: $samples"
-		echo "tolerance_percent: $tolerance"
 		echo "telemetry_interval_seconds: $telemetry_interval"
 		echo "pressure_dir: $pressure_dir"
 		echo "benchmark: BenchmarkMapSet"
 		echo "benchtime: 1s"
-		echo "acceptance: median-only"
-		echo "calibration_median_ns: $median"
+		echo "acceptance: $ACCEPTANCE_RULE"
+		echo "band_method: $BAND_METHOD"
+		echo "prediction_level_percent: $PREDICTION_LEVEL_PERCENT"
+		echo "prediction_normal_quantile: $PREDICTION_Z"
+		echo "mad_normal_scale: $MAD_NORMAL_SCALE"
+		echo "scale_degrees_of_freedom: $scale_df"
+		echo "prediction_student_t_quantile: $student_quantile"
+		echo "scale_uncertainty_inflation: $scale_inflation"
+		echo "center_uncertainty_factor: $center_factor"
+		echo "prediction_total_multiplier: $total_multiplier"
+		echo "endpoint_drift_multiplier: $drift_multiplier"
+		echo "calibration_center_ns: $median"
+		echo "calibration_process_mad_ns: $mad"
+		echo "calibration_process_scale_ns: $normalized_scale"
+		echo "band_halfwidth_ns: $halfwidth"
+		echo "band_halfwidth_percent: $(awk -v half="$halfwidth" -v center="$median" 'BEGIN { printf "%.3f", 100 * half / center }')"
+		echo "endpoint_drift_halfwidth_ns: $drift_halfwidth"
+		echo "endpoint_drift_halfwidth_percent: $(awk -v half="$drift_halfwidth" -v center="$median" 'BEGIN { printf "%.3f", 100 * half / center }')"
 		echo "lower_ns: $lower"
 		echo "upper_ns: $upper"
 		echo "reference_median_ns: $reference_median"
@@ -328,8 +472,9 @@ calibrate() {
 	# refuses to alter a band once declared.
 	cp "$raw" "$out_abs/calibration-mapset.txt"
 	cp "$sorted" "$out_abs/calibration-mapset-sorted-ns.txt"
+	cp "$process_medians" "$out_abs/calibration-process-medians-ns.txt"
 	mv "$candidate" "$band"
-	record_event "$out_abs" "band-declared sha256=$(sha256sum "$band" | awk '{print $1}') median=$median lower=$lower upper=$upper acceptance=median-only"
+	record_event "$out_abs" "band-declared sha256=$(sha256sum "$band" | awk '{print $1}') center=$median mad=$mad lower=$lower upper=$upper acceptance=$ACCEPTANCE_RULE"
 
 	cat "$band"
 	if [ "$reference_decision" = fail ]; then
@@ -441,12 +586,13 @@ start_telemetry() {
 write_verdict() {
 	local out="$1"
 	local band="$out/$BAND_NAME"
-	local samples lower upper acceptance
-	samples="$(band_value samples_per_process "$band")"
+	local canary_processes lower upper drift_halfwidth acceptance
+	canary_processes="$(band_value canary_processes "$band")"
 	lower="$(band_value lower_ns "$band")"
 	upper="$(band_value upper_ns "$band")"
+	drift_halfwidth="$(band_value endpoint_drift_halfwidth_ns "$band")"
 	acceptance="$(band_value acceptance "$band")"
-	[ "$acceptance" = median-only ] || die "unsupported acceptance rule '$acceptance'"
+	[ "$acceptance" = "$ACCEPTANCE_RULE" ] || die "unsupported acceptance rule '$acceptance'"
 
 	local pre_median="missing"
 	local post_median="missing"
@@ -456,10 +602,12 @@ write_verdict() {
 	local post_outside=missing
 	local pre_spread=missing
 	local post_spread=missing
+	local endpoint_drift=missing
+	local endpoint_drift_decision=missing
 	local scratch
 	scratch="$(mktemp -d "${TMPDIR:-/tmp}/y-crdt-bracket-evaluate.XXXXXX")"
-	if [ -s "$out/pre-canary.txt" ]; then
-		if pre_median="$(sample_median_if_complete "$out/pre-canary.txt" "$samples" "$scratch/pre.sorted")"; then
+	if [ -s "$out/pre-canary-process-medians-ns.txt" ]; then
+		if pre_median="$(recorded_process_median_if_complete "$out/pre-canary-process-medians-ns.txt" "$canary_processes" "$scratch/pre.sorted")"; then
 			if inside_band "$pre_median" "$lower" "$upper"; then pre_decision=pass; else pre_decision=fail; fi
 			read -r pre_outside pre_spread < <(awk -v median="$pre_median" -v lower="$lower" -v upper="$upper" '
 				NR == 1 { min = $1 } { max = $1; if ($1 < lower || $1 > upper) outside++ }
@@ -470,8 +618,8 @@ write_verdict() {
 			pre_decision=invalid
 		fi
 	fi
-	if [ -s "$out/post-canary.txt" ]; then
-		if post_median="$(sample_median_if_complete "$out/post-canary.txt" "$samples" "$scratch/post.sorted")"; then
+	if [ -s "$out/post-canary-process-medians-ns.txt" ]; then
+		if post_median="$(recorded_process_median_if_complete "$out/post-canary-process-medians-ns.txt" "$canary_processes" "$scratch/post.sorted")"; then
 			if inside_band "$post_median" "$lower" "$upper"; then post_decision=pass; else post_decision=fail; fi
 			read -r post_outside post_spread < <(awk -v median="$post_median" -v lower="$lower" -v upper="$upper" '
 				NR == 1 { min = $1 } { max = $1; if ($1 < lower || $1 > upper) outside++ }
@@ -480,6 +628,15 @@ write_verdict() {
 		else
 			post_median=invalid
 			post_decision=invalid
+		fi
+	fi
+	if [[ "$pre_median" =~ ^[0-9]+$ ]] && [[ "$post_median" =~ ^[0-9]+$ ]]; then
+		endpoint_drift=$((post_median - pre_median))
+		[ "$endpoint_drift" -ge 0 ] || endpoint_drift=$((-endpoint_drift))
+		if [ "$endpoint_drift" -le "$drift_halfwidth" ]; then
+			endpoint_drift_decision=pass
+		else
+			endpoint_drift_decision=fail
 		fi
 	fi
 
@@ -511,6 +668,7 @@ write_verdict() {
 	fi
 	local result=rejected
 	if [ "$pre_decision" = pass ] && [ "$post_decision" = pass ] &&
+		[ "$endpoint_drift_decision" = pass ] &&
 		[ "$collector_status" = 0 ] && [ "$telemetry_status" = complete ] &&
 		[ "$band_integrity" = pass ] && [ "$telemetry_coverage" = pass ]; then
 		result=accepted
@@ -522,12 +680,15 @@ write_verdict() {
 		echo "band_ns: $lower..$upper"
 		echo "pre_median_ns: $pre_median"
 		echo "pre_decision: $pre_decision"
-		echo "pre_samples_outside_band: $pre_outside/$samples"
-		echo "pre_spread_percent: $pre_spread"
+		echo "pre_process_medians_outside_band: $pre_outside/$canary_processes"
+		echo "pre_process_median_spread_percent: $pre_spread"
 		echo "post_median_ns: $post_median"
 		echo "post_decision: $post_decision"
-		echo "post_samples_outside_band: $post_outside/$samples"
-		echo "post_spread_percent: $post_spread"
+		echo "post_process_medians_outside_band: $post_outside/$canary_processes"
+		echo "post_process_median_spread_percent: $post_spread"
+		echo "endpoint_drift_ns: $endpoint_drift"
+		echo "endpoint_drift_band_ns: 0..$drift_halfwidth"
+		echo "endpoint_drift_decision: $endpoint_drift_decision"
 		echo "collector_exit_status: $collector_status"
 		echo "telemetry_status: $telemetry_status"
 		echo "telemetry_coverage: $telemetry_coverage"
@@ -544,23 +705,25 @@ collect() {
 	[ "$#" = 1 ] || usage
 	local out="$1"
 	[ -d "$out" ] || die "output directory '$out' does not exist; run calibrate first"
+	require_clean_worktree
 	local out_abs
 	out_abs="$(cd "$out" && pwd)"
 	local band="$out_abs/$BAND_NAME"
 	[ -s "$band" ] || die "$band is missing; run calibrate first"
 	[ "$(band_value format "$band")" = "$BAND_FORMAT" ] || die "unsupported band format"
-	[ "$(band_value commit "$band")" = "$(git -C "$ROOT" rev-parse HEAD)" ] ||
+	[ "$(band_value commit "$band")" = "$(repo_git rev-parse HEAD)" ] ||
 		die "current commit differs from the commit recorded in $band"
-	local cpus samples interval pressure_dir reference_decision
+	local cpus samples canary_processes interval pressure_dir reference_decision
 	cpus="$(band_value cpus "$band")"
 	samples="$(band_value samples_per_process "$band")"
+	canary_processes="$(band_value canary_processes "$band")"
 	interval="$(band_value telemetry_interval_seconds "$band")"
 	pressure_dir="$(band_value pressure_dir "$band")"
 	reference_decision="$(band_value reference_decision "$band")"
 	if [ "$reference_decision" != pass ] && ! all_legs_selected; then
 		die "partial LEGS requires a recorded reference calibration PASS; got '$reference_decision'"
 	fi
-	for artifact in pre-canary.txt post-canary.txt during-mpstat.txt during-pressure.txt \
+	for artifact in pre-canary.txt pre-canary-process-medians-ns.txt post-canary.txt post-canary-process-medians-ns.txt during-mpstat.txt during-pressure.txt \
 		run.log collector-exit-status.txt telemetry-status.txt bracket-verdict.txt; do
 		[ ! -e "$out_abs/$artifact" ] || die "$out_abs/$artifact already exists; use a fresh output directory"
 	done
@@ -593,7 +756,8 @@ collect() {
 
 	record_event "$out_abs" "pre-canary-start"
 	local pre_status=0
-	run_mapset "$cpus" "$samples" "$out_abs/pre-canary.txt" || pre_status=$?
+	run_mapset_group "$cpus" "$canary_processes" "$samples" \
+		"$out_abs/pre-canary.txt" "$out_abs/pre-canary-process-medians-ns.txt" || pre_status=$?
 	record_event "$out_abs" "pre-canary-end status=$pre_status"
 	[ "$pre_status" = 0 ] || {
 		echo not-run >"$out_abs/collector-exit-status.txt"
@@ -604,7 +768,8 @@ collect() {
 		die "pre-canary command failed"
 	}
 	local pre_median lower upper
-	pre_median="$(sample_median "$out_abs/pre-canary.txt" "$samples" "$out_abs/pre-canary-sorted-ns.txt")"
+	pre_median="$(recorded_process_median "$out_abs/pre-canary-process-medians-ns.txt" \
+		"$canary_processes" "$out_abs/pre-canary-process-medians-sorted-ns.txt")"
 	lower="$(band_value lower_ns "$band")"
 	upper="$(band_value upper_ns "$band")"
 	if ! inside_band "$pre_median" "$lower" "$upper"; then
@@ -644,7 +809,8 @@ collect() {
 	# partial's completed columns were bracketed, and it remains inside telemetry.
 	record_event "$out_abs" "post-canary-start"
 	local post_status=0
-	run_mapset "$cpus" "$samples" "$out_abs/post-canary.txt" || post_status=$?
+	run_mapset_group "$cpus" "$canary_processes" "$samples" \
+		"$out_abs/post-canary.txt" "$out_abs/post-canary-process-medians-ns.txt" || post_status=$?
 	record_event "$out_abs" "post-canary-end status=$post_status"
 
 	local sampler_status=complete
@@ -664,7 +830,10 @@ collect() {
 	{
 		echo "bracket_band: $BAND_NAME"
 		echo "bracket_band_sha256: $band_hash"
-		echo "bracket_acceptance: median-only (declared before collection)"
+		echo "bracket_acceptance: $ACCEPTANCE_RULE (declared before collection)"
+		echo "bracket_band_method: $BAND_METHOD (99% predictive interval for a median of fresh-process medians)"
+		echo "bracket_canary_unit: median of $canary_processes fresh-process medians, $samples samples each"
+		echo "bracket_endpoint_drift: abs(post-pre) <= $(band_value endpoint_drift_halfwidth_ns "$band") ns"
 		echo "bracket_cpus: $cpus"
 		echo "bracket_telemetry: before pre-canary through after post-canary"
 	} >>"$out_abs/PROVENANCE"
@@ -679,12 +848,14 @@ evaluate() {
 	write_verdict "$(cd "$out" && pwd)"
 }
 
-[ "$#" -ge 1 ] || usage
-command="$1"
-shift
-case "$command" in
-calibrate) calibrate "$@" ;;
-collect) collect "$@" ;;
-evaluate) evaluate "$@" ;;
-*) usage ;;
-esac
+if [ "${BASH_SOURCE[0]}" = "$0" ]; then
+	[ "$#" -ge 1 ] || usage
+	command="$1"
+	shift
+	case "$command" in
+	calibrate) calibrate "$@" ;;
+	collect) collect "$@" ;;
+	evaluate) evaluate "$@" ;;
+	*) usage ;;
+	esac
+fi
