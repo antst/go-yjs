@@ -296,11 +296,6 @@ func (y *YXmlElement) GetAttributes() Object {
 	return typeMapGetAll(y)
 }
 
-// ToDOM Creates a Dom Element that mirrors this YXmlElement.
-func (y *YXmlElement) ToDOM() {
-
-}
-
 func (y *YXmlElement) writeType(encoder updateEncoder) {
 	encoder.writeTypeRef(yXmlElementRefID)
 	if err := encoder.writeKey(y.NodeName); err != nil {
@@ -590,9 +585,6 @@ func (y *YXmlFragment) ToJson() interface{} {
 }
 
 // not supported yet.
-func (y *YXmlFragment) ToDOM() {
-
-}
 
 // Insert Inserts new content at an index.
 //
@@ -879,10 +871,6 @@ func (y *yXmlHook) ToString() string {
 	return "[object Object]"
 }
 
-func (y *yXmlHook) ToDOM() {
-
-}
-
 // Transform the properties of this type to binary and write it to an
 // BinaryEncoder.
 //
@@ -956,9 +944,6 @@ func (y *YXmlText) cloneType() abstractType {
 func (y *YXmlText) Clone() *YXmlText { return y.cloneType().(*YXmlText) }
 
 // not supported yet.
-func (y *YXmlText) ToDOM() {
-
-}
 
 func (y *YXmlText) ToString() string {
 	var builder strings.Builder
