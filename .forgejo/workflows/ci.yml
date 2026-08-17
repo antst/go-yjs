@@ -1,0 +1,166 @@
+name: ci
+
+# Forgejo is where development happens, so this is the gate that runs BEFORE a
+# change ever reaches a GitHub pull request. It mirrors .githooks/pre-push, whose
+# weakness is that it runs on whatever machine the author happens to have and can
+# be skipped. Everything here is reproducible and cannot be.
+#
+# DELIBERATELY ABSENT: the timing benchmarks and the fixed-anchor mutation
+# canary. A shared CI runner has exactly the dispersion problem that made a
+# ±5% acceptance band behave like a coin flip on a quiet dedicated host — see
+# bench/check-mutation-anchor.sh. Timing verdicts belong on the benchmark box,
+# not here. Correctness gates only.
+#
+# go.mod requires Go 1.26, newer than any distribution package, so every job
+# pins a toolchain image rather than apk-installing one.
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: docker
+    container:
+      image: golang:1.26-alpine
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache bash git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: gofmt
+        # Not part of golangci-lint's default set, and this repository has been
+        # bitten by unformatted files reaching review.
+        run: |
+          unformatted="$(gofmt -l . | grep -v node_modules || true)"
+          if [ -n "$unformatted" ]; then
+            printf 'unformatted files:\n%s\n' "$unformatted" >&2
+            exit 1
+          fi
+
+      - name: golangci-lint
+        # Uncapped: the default max-same-issues=3 hides duplicates, which is how
+        # a systematic problem reads as three incidents.
+        run: |
+          go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.12.2
+          golangci-lint run --max-same-issues=0 --max-issues-per-linter=0
+
+  build-vet:
+    runs-on: docker
+    container:
+      image: golang:1.26-alpine
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache bash git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build
+        run: go build ./...
+
+      - name: Vet
+        run: go vet ./...
+
+      - name: Vet with the struct-store oracle build tag
+        # A tagged file is invisible to the default vet. A dangling identifier
+        # behind this tag once broke the build while everything else was green.
+        run: go vet -tags=structstoreoracle ./...
+
+  test:
+    runs-on: docker
+    container:
+      image: golang:1.26-alpine
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache bash git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Unit tests
+        run: go test ./... -count=1 -timeout 20m
+
+  race:
+    runs-on: docker
+    # Debian rather than Alpine on purpose: the race detector wants glibc, and
+    # musl has a history of surprises here that would be diagnosed as flakiness.
+    container:
+      image: golang:1.26
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Race detector, whole module
+        # WHOLE module, never a filtered -run. A filtered race run reports green
+        # over process-aborting checkptr failures in the packages it skipped.
+        run: go test ./... -race -count=1 -timeout 40m
+
+  oracle:
+    runs-on: docker
+    container:
+      image: golang:1.26-alpine
+    steps:
+      - name: Install dependencies
+        # Alpine 3.21+ ships Node 22, which the .mjs harness needs.
+        run: apk add --no-cache bash git nodejs npm
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify the Node major matches the pinned CI runtime
+        # The image supplies Node, so an image refresh can change the engine the
+        # reference implementation runs on without any file here changing.
+        # GitHub CI pins node-version 24; assert the same so the two gates cannot
+        # silently diverge on the runtime.
+        run: |
+          major="$(node -p 'process.versions.node.split(".")[0]')"
+          if [ "$major" != "24" ]; then
+            printf 'node major %s, expected 24 — the image moved; realign with .github/workflows/oracle.yml\n' "$major" >&2
+            exit 1
+          fi
+          printf 'node %s\n' "$(node --version)"
+
+      - name: Install the pinned reference implementation
+        # npm ci, never npm install: the whole point is that yjs@13.6.31 and
+        # y-protocols@1.0.7 are the versions we claim byte-compatibility with.
+        # A resolved-but-different version would silently change what "compatible"
+        # means, and the differential would still pass.
+        run: cd fuzz && npm ci
+
+      - name: Verify the reference version actually installed
+        run: |
+          cd fuzz
+          installed="$(node -e "console.log(require('yjs/package.json').version)")"
+          expected="$(node -e "console.log(require('./package.json').dependencies.yjs)")"
+          if [ "$installed" != "$expected" ]; then
+            printf 'yjs %s installed but %s is pinned\n' "$installed" "$expected" >&2
+            exit 1
+          fi
+          printf 'yjs %s confirmed\n' "$installed"
+
+      - name: Differential oracle, fast tier, both directions
+        # 13 surfaces, 20,000 seeds. Direction B is the half that matters most:
+        # only bytes produced HERE and decoded by the reference can catch a
+        # non-canonical encoding.
+        run: bash fuzz/run-gate.sh --tier fast --dir both
+
+  fuzz-smoke:
+    runs-on: docker
+    container:
+      image: golang:1.26-alpine
+    steps:
+      - name: Install dependencies
+        run: apk add --no-cache bash git
+
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Replay the committed fuzz corpus
+        # Not a fuzzing run — it replays the seeds already in testdata/fuzz, so a
+        # regression against a previously-found input fails here. Real fuzzing is
+        # unbounded and belongs in a scheduled job, not on every push.
+        run: go test ./crdt/ ./protocol/ -run 'Fuzz' -count=1 -timeout 15m
