@@ -27,14 +27,14 @@ go.work.sum
 # V2 fixture harness JS deps (fixtures.json itself is committed).
 # The lockfile IS committed: the fixtures are byte-exact expectations produced by yjs+lib0,
 # so the exact transitive versions are part of the expectation.
-v2_test_fixtures/node_modules/
+v2_test_fixtures/node_modules
 
 # Cross-impl fuzz harness JS deps (NDJSON cases are generated on demand).
 # The lockfile IS committed — it is what actually pins the oracle's reference side. yjs@13.6.31
 # depends on `lib0: ^0.2.99`, and lib0 is the encoder every byte-exact comparison is made
 # against; without the lockfile each CI run resolved a different lib0 (0.2.117 locally, 18
 # patches past the floor), so the oracle's ground truth could drift between runs.
-fuzz/node_modules/
+fuzz/node_modules
 
 
 # Rust benchmark harness build output (bench/yrs is a comparison harness, not a dependency)
