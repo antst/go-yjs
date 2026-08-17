@@ -111,6 +111,19 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
+      - name: Verify the Node major matches the pinned CI runtime
+        # The image supplies Node, so an image refresh can change the engine the
+        # reference implementation runs on without any file here changing.
+        # GitHub CI pins node-version 24; assert the same so the two gates cannot
+        # silently diverge on the runtime.
+        run: |
+          major="$(node -p 'process.versions.node.split(".")[0]')"
+          if [ "$major" != "24" ]; then
+            printf 'node major %s, expected 24 — the image moved; realign with .github/workflows/oracle.yml\n' "$major" >&2
+            exit 1
+          fi
+          printf 'node %s\n' "$(node --version)"
+
       - name: Install the pinned reference implementation
         # npm ci, never npm install: the whole point is that yjs@13.6.31 and
         # y-protocols@1.0.7 are the versions we claim byte-compatibility with.
