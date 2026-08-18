@@ -187,8 +187,15 @@ type CompactingStore interface {
 // gives that property automatically.
 //
 // StateVector describes the same coverage without requiring a reader to
-// instantiate a document. It may be derived from Update with
-// crdt.EncodeStateVectorFromUpdate or its V2 form.
+// instantiate a document.
+//
+// AN IMPLEMENTATION MAY IGNORE IT. What LoadCheckpoint returns must be correct
+// for the stored update; it need not be the same bytes the caller supplied. A
+// store with somewhere cheap to put it should keep it and save every reader a
+// derivation; a store whose medium has no room — a blob with no free-form
+// metadata — may discard it and derive on read with
+// crdt.EncodeStateVectorFromUpdate or its V2 form. Both are conforming, and the
+// choice is invisible to callers.
 //
 // Both slices are borrowed only until SaveCheckpoint returns. An implementation
 // that retains or asynchronously writes either must copy first. Fence zero is
@@ -240,5 +247,15 @@ type CheckpointStore interface {
 	// result.
 	LoadCheckpoint(context.Context, backend.DocumentID) (Checkpoint, error)
 	// FenceMode is fixed at construction, for the same reason it is on Store.
+	//
+	// FENCED MODE NEEDS SOMEWHERE TO PERSIST THE EPOCH. Rejecting a superseded
+	// owner means remembering, per document and durably, the highest fence
+	// accepted so far. A medium that stores only a content blob with no
+	// free-form metadata cannot do that, and holding the epoch in a separate
+	// service is not a substitute: this contract is meant to be the FINAL
+	// stale-owner rejection precisely because a partitioned holder can stay
+	// alive, so a rejection that depends on reaching another service is not the
+	// backstop it looks like. Such a medium should report Unfenced and rely on
+	// the cluster lease alone.
 	FenceMode() FenceMode
 }
