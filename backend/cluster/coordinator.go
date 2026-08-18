@@ -33,7 +33,18 @@ type Lease struct {
 //
 // A lease holder must stop serving writes when its lease expires or renewal
 // fails. Because a partitioned holder can remain alive, durable mutations also
-// carry Lease.Fence and persistence provides the final stale-owner rejection.
+// carry Lease.Fence and a FENCED persistence store provides the final
+// stale-owner rejection.
+//
+// THAT SECOND LAYER IS NOT ALWAYS THERE. A store reports Unfenced when its
+// medium has nowhere durable to keep a per-document epoch — a bare content blob
+// is the common case. Against such a store the lease is the ONLY thing standing
+// between a partitioned holder and a write, so "stop serving when the lease is
+// lost" stops being defence in depth and becomes the whole defence. Check
+// FenceMode before assuming a backstop exists, and shed clients on lease loss
+// rather than merely declining to write: a node that keeps serving reads and
+// presence while silently failing to persist is split-brain the CRDT cannot
+// resolve for you.
 type Coordinator interface {
 	Acquire(context.Context, backend.DocumentID, backend.NodeID, time.Duration) (Lease, error)
 	Renew(context.Context, Lease, time.Duration) (Lease, error)

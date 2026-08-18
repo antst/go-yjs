@@ -2,6 +2,18 @@
 // Yjs-compatible backends. Implementations may use SQL, files, object storage,
 // or another medium; the contract is expressed only in bytes and revisions.
 //
+// TWO PROFILES, CHOSEN BY THE MEDIUM. Store is the log profile: appended
+// records stay independently readable, so recovery can be incremental and
+// compaction is an optimisation. CheckpointStore is the single-current-state
+// profile, for a medium whose durable unit is a document-sized blob rewritten in
+// place — an object-store key, a file whose id is a stable pointer, one row.
+//
+// Pick by asking whether the medium can retain two writes as two separately
+// readable records. Forcing a blob medium into the log profile costs either one
+// blob per record, abandoning the stable pointer the medium exists to provide,
+// or a log framed inside the blob, which breaks the stored format for anything
+// else that reads or writes it.
+//
 // Fence mode governs mutations, not stored history. A deployment may reopen
 // data written through an Unfenced store as Fenced without migrating it: loads
 // return the existing recovery view, and the first fenced mutation establishes
@@ -163,4 +175,90 @@ type Compactor interface {
 type CompactingStore interface {
 	Store
 	Compactor
+}
+
+// SaveCheckpointRequest installs the complete durable state of one document.
+//
+// Update must cover EVERYTHING the caller has previously saved for this
+// document. A CheckpointStore replaces rather than merges, so a save that
+// regresses coverage discards the difference permanently and the store cannot
+// detect it — the bytes are opaque to persistence by design. Callers normally
+// produce Update with crdt.EncodeStateAsUpdate over the live document, which
+// gives that property automatically.
+//
+// StateVector describes the same coverage without requiring a reader to
+// instantiate a document. THE CALLER MUST SUPPLY IT. It is free for the caller,
+// which has just encoded the update, and requiring it is what keeps a store
+// free of any obligation to parse CRDT bytes: a store that persists it
+// alongside the update never interprets either.
+//
+// AN IMPLEMENTATION MAY IGNORE IT. What LoadCheckpoint returns must be correct
+// for the stored update; it need not be the same bytes the caller supplied. A
+// store with somewhere cheap to put it should keep it and save every reader a
+// derivation; a store whose medium has no room — a blob with no free-form
+// metadata — may discard it and derive on read with
+// crdt.EncodeStateVectorFromUpdate or its V2 form. Both are conforming, and the
+// choice is invisible to callers.
+//
+// Both slices are borrowed only until SaveCheckpoint returns. An implementation
+// that retains or asynchronously writes either must copy first. Fence zero is
+// the ordinary non-clustered mode.
+type SaveCheckpointRequest struct {
+	DocumentID  backend.DocumentID
+	Fence       backend.Fence
+	Update      []byte
+	StateVector []byte
+}
+
+// CheckpointStore persists exactly ONE current state per document, replacing it
+// on every save.
+//
+// This is the profile for a medium whose durable unit is a document-sized blob
+// rewritten in place — an object-store key, a file whose id is a stable
+// pointer, a single row. Store is the profile for a medium that can hold an
+// ordered log of independently durable records.
+//
+// WHICH PROFILE TO IMPLEMENT. Ask whether the medium can retain two writes as
+// two separately readable records. If it can, implement Store: an append log
+// preserves every transaction, so a reader can replay history and a compaction
+// is an optimisation rather than a requirement. If a second write necessarily
+// overwrites the first, implement CheckpointStore; making such a medium satisfy
+// Store means either one blob per record — which abandons the stable-pointer
+// model the medium exists to provide — or framing a log inside the blob, which
+// breaks the format for anything else that reads it.
+//
+// WHAT IS GIVEN UP. A checkpoint store cannot serve incremental recovery, so
+// there is no pagination, no per-record history, and no Compact: every load is
+// the whole document. It also cannot detect a caller that saves a regressing
+// state. In exchange it needs no envelope, so the stored bytes can be exactly a
+// Yjs update that another system reads and writes directly.
+//
+// The methods are name-qualified rather than Save/Load so that one type can
+// offer both profiles; Loader.Load already takes a different signature, and Go
+// would otherwise make the two mutually exclusive.
+type CheckpointStore interface {
+	// SaveCheckpoint returning nil means the state crossed the implementation's
+	// durability boundary. Revisions are strictly increasing per document.
+	//
+	// Errors: ErrStaleFence when a superseded owner writes, ErrFenceRequired
+	// when a fenced store receives fence zero, ErrUnexpectedFence when an
+	// unfenced store receives a non-zero fence.
+	SaveCheckpoint(context.Context, SaveCheckpointRequest) (Revision, error)
+	// LoadCheckpoint returns the current state, or ErrNotFound when the
+	// document has never been saved. Both slices in the result are owned by the
+	// caller: mutating them must not change durable state or another reader's
+	// result.
+	LoadCheckpoint(context.Context, backend.DocumentID) (Checkpoint, error)
+	// FenceMode is fixed at construction, for the same reason it is on Store.
+	//
+	// FENCED MODE NEEDS SOMEWHERE TO PERSIST THE EPOCH. Rejecting a superseded
+	// owner means remembering, per document and durably, the highest fence
+	// accepted so far. A medium that stores only a content blob with no
+	// free-form metadata cannot do that, and holding the epoch in a separate
+	// service is not a substitute: this contract is meant to be the FINAL
+	// stale-owner rejection precisely because a partitioned holder can stay
+	// alive, so a rejection that depends on reaching another service is not the
+	// backstop it looks like. Such a medium should report Unfenced and rely on
+	// the cluster lease alone.
+	FenceMode() FenceMode
 }
