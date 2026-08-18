@@ -187,7 +187,10 @@ type CompactingStore interface {
 // gives that property automatically.
 //
 // StateVector describes the same coverage without requiring a reader to
-// instantiate a document.
+// instantiate a document. THE CALLER MUST SUPPLY IT. It is free for the caller,
+// which has just encoded the update, and requiring it is what keeps a store
+// free of any obligation to parse CRDT bytes: a store that persists it
+// alongside the update never interprets either.
 //
 // AN IMPLEMENTATION MAY IGNORE IT. What LoadCheckpoint returns must be correct
 // for the stored update; it need not be the same bytes the caller supplied. A
