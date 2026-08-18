@@ -206,3 +206,24 @@ func cloneCheckpoint(checkpoint persistence.Checkpoint) persistence.Checkpoint {
 }
 
 var _ persistence.CompactingStore = (*Store)(nil)
+
+// Delete removes a document's durable history. Idempotent by contract: an
+// absent document is a successful delete, not ErrNotFound.
+func (s *Store) Delete(ctx context.Context, request persistence.DeleteRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.data.mu.Lock()
+	defer s.data.mu.Unlock()
+	document := s.data.docs[request.DocumentID]
+	if document == nil {
+		// Fence rules still apply to a document with no history: a superseded
+		// owner must not learn it is superseded only when data happens to exist.
+		document = &history{}
+	}
+	if err := acceptFence(s.mode, document, request.Fence); err != nil {
+		return err
+	}
+	delete(s.data.docs, request.DocumentID)
+	return nil
+}

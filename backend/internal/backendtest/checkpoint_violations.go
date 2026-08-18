@@ -31,12 +31,27 @@ const (
 	// AcceptAnyFence skips fence checking entirely, so a superseded owner can
 	// overwrite the state of the node that replaced it.
 	AcceptAnyFence CheckpointViolation = "accept-any-fence"
+	// DeleteNotIdempotent reports ErrNotFound for an absent document, which
+	// fails a retrying cascade on its second attempt.
+	DeleteNotIdempotent CheckpointViolation = "delete-not-idempotent"
+	// DeleteLeavesState returns nil without removing anything — the shape a
+	// deletion request must never silently take.
+	DeleteLeavesState CheckpointViolation = "delete-leaves-state"
+	// DeletePurgesEverything removes every document rather than the named one.
+	DeletePurgesEverything CheckpointViolation = "delete-purges-everything"
+	// DeleteIgnoresCancellation deletes anyway after the context is cancelled.
+	DeleteIgnoresCancellation CheckpointViolation = "delete-ignores-cancellation"
 )
 
 // AllCheckpointViolations is every planted breach, so the rejection test cannot
 // silently cover fewer than exist.
 var AllCheckpointViolations = []CheckpointViolation{
 	AliasOnSave, AliasOnLoad, FrozenRevision, SilentMissing, IgnoreCancellation, AcceptAnyFence,
+}
+
+// AllDeletionViolations is every planted breach of the Deleter contract.
+var AllDeletionViolations = []CheckpointViolation{
+	DeleteNotIdempotent, DeleteLeavesState, DeletePurgesEverything, DeleteIgnoresCancellation,
 }
 
 // BrokenCheckpointStore is the reference implementation with exactly one
@@ -105,4 +120,32 @@ func (b *BrokenCheckpointStore) LoadCheckpoint(ctx context.Context, id backend.D
 		return stored, nil
 	}
 	return cloneCheckpoint(stored), nil
+}
+
+// Delete breaches exactly one deletion rule, or behaves correctly for the
+// violations that concern saving and loading.
+func (b *BrokenCheckpointStore) Delete(ctx context.Context, request persistence.DeleteRequest) error {
+	if b.violation != DeleteIgnoresCancellation {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+	}
+	b.mutex.Lock()
+	defer b.mutex.Unlock()
+	if err := acceptCheckpointFence(b.mode, b.fences, request.DocumentID, request.Fence); err != nil {
+		return err
+	}
+	switch b.violation {
+	case DeleteNotIdempotent:
+		if _, ok := b.states[request.DocumentID]; !ok {
+			return persistence.ErrNotFound
+		}
+	case DeleteLeavesState:
+		return nil
+	case DeletePurgesEverything:
+		b.states = make(map[backend.DocumentID]persistence.Checkpoint)
+		return nil
+	}
+	delete(b.states, request.DocumentID)
+	return nil
 }

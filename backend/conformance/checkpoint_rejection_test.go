@@ -31,10 +31,12 @@ func TestCheckpointSuiteRejectsViolations(t *testing.T) {
 		runViolationFixture(t)
 		return
 	}
-	if len(backendtest.AllCheckpointViolations) == 0 {
-		t.Fatal("no violations declared; this test would pass vacuously")
+	if len(backendtest.AllCheckpointViolations) == 0 || len(backendtest.AllDeletionViolations) == 0 {
+		t.Fatal("a violation list is empty; this test would pass vacuously")
 	}
-	for _, violation := range backendtest.AllCheckpointViolations {
+	cases := append(append([]backendtest.CheckpointViolation(nil),
+		backendtest.AllCheckpointViolations...), backendtest.AllDeletionViolations...)
+	for _, violation := range cases {
 		t.Run(string(violation), func(t *testing.T) {
 			command := exec.Command(os.Args[0], "-test.run=TestCheckpointSuiteRejectsViolations", "-test.v")
 			command.Env = append(os.Environ(), violationEnv+"="+string(violation))
@@ -54,6 +56,14 @@ func runViolationFixture(t *testing.T) {
 	violation := backendtest.CheckpointViolation(os.Getenv(violationEnv))
 	// The fence breach is only observable against a fenced store; the rest are
 	// observable unfenced, and AcceptAnyFence is checked in both profiles.
+	for _, deletion := range backendtest.AllDeletionViolations {
+		if violation == deletion {
+			conformance.CheckpointPersistenceDeletion(t, func() persistence.DeletingCheckpointStore {
+				return backendtest.NewBrokenCheckpointStore(violation, persistence.Unfenced)
+			})
+			return
+		}
+	}
 	if violation == backendtest.AcceptAnyFence {
 		conformance.CheckpointPersistenceFencing(t, func() persistence.CheckpointStore {
 			return backendtest.NewBrokenCheckpointStore(violation, persistence.Fenced)
