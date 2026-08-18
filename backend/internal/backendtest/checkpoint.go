@@ -93,3 +93,17 @@ func acceptCheckpointFence(mode persistence.FenceMode, fences map[backend.Docume
 	}
 	return nil
 }
+
+// Delete removes a document's durable state, idempotently.
+func (s *CheckpointStore) Delete(ctx context.Context, request persistence.DeleteRequest) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mutex.Lock()
+	defer s.mutex.Unlock()
+	if err := acceptCheckpointFence(s.mode, s.fences, request.DocumentID, request.Fence); err != nil {
+		return err
+	}
+	delete(s.states, request.DocumentID)
+	return nil
+}

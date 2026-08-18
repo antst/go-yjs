@@ -262,3 +262,71 @@ type CheckpointStore interface {
 	// the cluster lease alone.
 	FenceMode() FenceMode
 }
+
+// DeleteRequest removes a document's durable state.
+//
+// Fence zero is the ordinary non-clustered mode.
+type DeleteRequest struct {
+	DocumentID backend.DocumentID
+	Fence      backend.Fence
+}
+
+// Deleter removes a document's durable state entirely.
+//
+// OPTIONAL, AND DELIBERATELY SO. Deletion is a correctness and compliance
+// requirement rather than a performance strategy, so the temptation is to put
+// it on Store and CheckpointStore directly. It is optional anyway, because some
+// media are forbidden to delete: WORM storage, object locks, regulated archival
+// tiers. The same compliance pressure that demands erasure in one regime demands
+// immutability in another, and a contract with a mandatory Delete cannot express
+// the second. A store that cannot delete simply does not implement this, and a
+// caller that needs erasure must type-assert and fail loudly when it is absent —
+// which is a better outcome than an implementation whose Delete silently does
+// nothing.
+//
+// ORDERING AGAINST THE IN-MEMORY REGISTRY, which is the part that goes wrong.
+// Deleting durable state while a document is still live resurrects it: the live
+// document is unaffected by the delete, and its next save writes the state back.
+// memory.Registry.Invalidate is necessary but NOT sufficient — it drains the
+// current generation, and a later Acquire opens a fresh one from storage that
+// has not been deleted yet, which then saves the content back after the delete
+// lands. The safe sequence has three steps:
+//
+//  1. stop admitting acquisitions for the document, in application state that
+//     the registry's OpenFunc consults — the registry has no concept of this;
+//  2. Invalidate, so the live generation drains and is destroyed;
+//  3. Delete.
+//
+// Getting that order wrong loses no data and reports no error; it silently
+// restores content that was supposed to be erased, which for a deletion request
+// is the worst available failure.
+type Deleter interface {
+	// Delete removes the document's durable state. Returning nil means the
+	// removal crossed the same durability boundary a write does, and a
+	// subsequent Load or LoadCheckpoint MUST report ErrNotFound. "Eventually
+	// gone" is not permitted: a load that still returns content after a
+	// successful delete is indistinguishable from the delete not happening, so
+	// it is not a result a caller can act on.
+	//
+	// IDEMPOTENT. Deleting a document with no durable state succeeds and
+	// returns nil. It must not report ErrNotFound: a cascade retries, and the
+	// second attempt must not fail the operation it is completing.
+	//
+	// Errors: ErrStaleFence when a superseded owner deletes, ErrFenceRequired
+	// when a fenced store receives fence zero, ErrUnexpectedFence when an
+	// unfenced store receives a non-zero fence. A rejected delete must leave
+	// the durable state intact.
+	Delete(context.Context, DeleteRequest) error
+}
+
+// DeletingStore is the log profile plus deletion.
+type DeletingStore interface {
+	Store
+	Deleter
+}
+
+// DeletingCheckpointStore is the checkpoint profile plus deletion.
+type DeletingCheckpointStore interface {
+	CheckpointStore
+	Deleter
+}

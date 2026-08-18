@@ -227,6 +227,18 @@ func (r *InProcessRegistry) Acquire(ctx context.Context, id backend.DocumentID, 
 // Context cancellation bounds the wait but does not undo poisoning. The last
 // releasing handle still completes destruction, so recovery cannot silently
 // revert to serving the stale document.
+//
+// INVALIDATE IS NOT ENOUGH TO ERASE A DOCUMENT. It drains the CURRENT instance;
+// a later Acquire opens a fresh one from persistence. So invalidating and then
+// deleting durable state leaves a window where something re-acquires, loads the
+// not-yet-deleted state, and saves it back after the delete lands. The content
+// returns, nothing reports an error, and for an erasure request that is the
+// worst available outcome.
+//
+// Erasure needs three steps in this order: stop admitting acquisitions for the
+// document, in application state that OpenFunc consults — this registry has no
+// concept of that and cannot supply it; then Invalidate; then delete durably.
+// See persistence.Deleter.
 func (r *InProcessRegistry) Invalidate(ctx context.Context, id backend.DocumentID) error {
 	if err := ctx.Err(); err != nil {
 		return err

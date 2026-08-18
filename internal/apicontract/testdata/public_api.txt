@@ -27,20 +27,26 @@ backend/cluster var ErrNotFound
 backend/conformance field ClusterHarness.Advance func(time.Duration)
 backend/conformance field ClusterHarness.Coordinator cluster.Coordinator
 backend/conformance func CheckpointPersistence (*testing.T, CheckpointStoreFactory)
+backend/conformance func CheckpointPersistenceDeletion (*testing.T, DeletingCheckpointStoreFactory)
 backend/conformance func CheckpointPersistenceFencing (*testing.T, FencedCheckpointStoreFactory)
 backend/conformance func Cluster (*testing.T, ClusterFactory)
 backend/conformance func Hub (*testing.T, HubFactory)
 backend/conformance func Memory (*testing.T, RegistryFactory)
 backend/conformance func Persistence (*testing.T, StoreFactory)
 backend/conformance func PersistenceCompaction (*testing.T, CompactingStoreFactory)
+backend/conformance func PersistenceDeletion (*testing.T, DeletingStoreFactory)
+backend/conformance func PersistenceDeletionFencing (*testing.T, FencedDeletingStoreFactory)
 backend/conformance func PersistenceFenceUpgrade (*testing.T, FenceUpgradeFactory)
 backend/conformance func PersistenceFencing (*testing.T, StoreFactory)
 backend/conformance type CheckpointStoreFactory () persistence.CheckpointStore
 backend/conformance type ClusterFactory () ClusterHarness
 backend/conformance type ClusterHarness struct
 backend/conformance type CompactingStoreFactory () persistence.CompactingStore
+backend/conformance type DeletingCheckpointStoreFactory () persistence.DeletingCheckpointStore
+backend/conformance type DeletingStoreFactory () persistence.DeletingStore
 backend/conformance type FenceUpgradeFactory () (persistence.Store, persistence.Store)
 backend/conformance type FencedCheckpointStoreFactory () persistence.CheckpointStore
+backend/conformance type FencedDeletingStoreFactory () persistence.DeletingStore
 backend/conformance type HubFactory () hub.Hub
 backend/conformance type RegistryFactory () memory.Registry
 backend/conformance type StoreFactory () persistence.Store
@@ -104,6 +110,8 @@ backend/persistence field CompactRequest.CheckpointUpdate []byte
 backend/persistence field CompactRequest.DocumentID backend.DocumentID
 backend/persistence field CompactRequest.Fence backend.Fence
 backend/persistence field CompactRequest.StateVector []byte
+backend/persistence field DeleteRequest.DocumentID backend.DocumentID
+backend/persistence field DeleteRequest.Fence backend.Fence
 backend/persistence field LoadOptions.AfterStateVector []byte
 backend/persistence field LoadOptions.Limit int
 backend/persistence field LoadOptions.PageToken PageToken
@@ -122,6 +130,7 @@ backend/persistence method CheckpointStore.FenceMode () FenceMode
 backend/persistence method CheckpointStore.LoadCheckpoint (context.Context, backend.DocumentID) (Checkpoint, error)
 backend/persistence method CheckpointStore.SaveCheckpoint (context.Context, SaveCheckpointRequest) (Revision, error)
 backend/persistence method Compactor.Compact (context.Context, CompactRequest) error
+backend/persistence method Deleter.Delete (context.Context, DeleteRequest) error
 backend/persistence method Loader.Load (context.Context, backend.DocumentID, LoadOptions) (Page, error)
 backend/persistence method Store.FenceMode () FenceMode
 backend/persistence type AppendRequest struct
@@ -131,6 +140,10 @@ backend/persistence type CheckpointStore interface
 backend/persistence type CompactRequest struct
 backend/persistence type CompactingStore interface
 backend/persistence type Compactor interface
+backend/persistence type DeleteRequest struct
+backend/persistence type Deleter interface
+backend/persistence type DeletingCheckpointStore interface
+backend/persistence type DeletingStore interface
 backend/persistence type FenceMode uint8
 backend/persistence type LoadOptions struct
 backend/persistence type Loader interface
