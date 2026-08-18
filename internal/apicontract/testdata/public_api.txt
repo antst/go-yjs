@@ -28,6 +28,7 @@ backend/conformance field ClusterHarness.Advance func(time.Duration)
 backend/conformance field ClusterHarness.Coordinator cluster.Coordinator
 backend/conformance func CheckpointPersistence (*testing.T, CheckpointStoreFactory)
 backend/conformance func CheckpointPersistenceDeletion (*testing.T, DeletingCheckpointStoreFactory)
+backend/conformance func CheckpointPersistenceDeletionFencing (*testing.T, FencedDeletingCheckpointStoreFactory)
 backend/conformance func CheckpointPersistenceFencing (*testing.T, FencedCheckpointStoreFactory)
 backend/conformance func Cluster (*testing.T, ClusterFactory)
 backend/conformance func Hub (*testing.T, HubFactory)
@@ -46,6 +47,7 @@ backend/conformance type DeletingCheckpointStoreFactory () persistence.DeletingC
 backend/conformance type DeletingStoreFactory () persistence.DeletingStore
 backend/conformance type FenceUpgradeFactory () (persistence.Store, persistence.Store)
 backend/conformance type FencedCheckpointStoreFactory () persistence.CheckpointStore
+backend/conformance type FencedDeletingCheckpointStoreFactory () persistence.DeletingCheckpointStore
 backend/conformance type FencedDeletingStoreFactory () persistence.DeletingStore
 backend/conformance type HubFactory () hub.Hub
 backend/conformance type RegistryFactory () memory.Registry

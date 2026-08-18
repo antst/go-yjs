@@ -217,3 +217,83 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 		}
 	})
 }
+
+// FencedDeletingCheckpointStoreFactory returns a fresh, empty FENCED checkpoint
+// store that deletes.
+type FencedDeletingCheckpointStoreFactory func() persistence.DeletingCheckpointStore
+
+// CheckpointPersistenceDeletionFencing checks that checkpoint deletion honours
+// cluster authority. Run it only against a factory whose FenceMode is Fenced.
+//
+// The log profile had this from the start and the checkpoint profile did not,
+// which was an oversight rather than a decision: every checkpoint store that
+// fences needs the same three assertions, and the third is the one that gets
+// missed.
+func CheckpointPersistenceDeletionFencing(t *testing.T, factory FencedDeletingCheckpointStoreFactory) {
+	t.Helper()
+
+	t.Run("fenced mode rejects absent and stale authority", func(t *testing.T) {
+		store := factory()
+		if mode := store.FenceMode(); mode != persistence.Fenced {
+			t.Fatalf("fenced deleting checkpoint factory mode = %d, want Fenced", mode)
+		}
+		ctx := context.Background()
+		kept := checkpointState(t, "kept")
+		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
+			DocumentID: "doc", Fence: 2, Update: kept, StateVector: checkpointVector(t, kept),
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Delete(ctx, persistence.DeleteRequest{DocumentID: "doc"}); !errors.Is(err, persistence.ErrFenceRequired) {
+			t.Fatalf("Delete without a fence = %v, want ErrFenceRequired", err)
+		}
+		if err := store.Delete(ctx, persistence.DeleteRequest{DocumentID: "doc", Fence: 1}); !errors.Is(err, persistence.ErrStaleFence) {
+			t.Fatalf("Delete from a superseded owner = %v, want ErrStaleFence", err)
+		}
+
+		// THE ASSERTION THAT GETS MISSED. Returning the right error is not
+		// enough: an implementation that checks the fence and removes state in
+		// the same block passes an error-only check while having already erased
+		// what the replacement owner is serving. Both rejections above must have
+		// left the state untouched.
+		got, err := store.LoadCheckpoint(ctx, "doc")
+		if err != nil {
+			t.Fatalf("a rejected delete removed the state: LoadCheckpoint = %v", err)
+		}
+		if string(got.Update) != string(kept) {
+			t.Fatal("a rejected delete changed the stored state")
+		}
+
+		if err := store.Delete(ctx, persistence.DeleteRequest{DocumentID: "doc", Fence: 2}); err != nil {
+			t.Fatalf("Delete from the current owner = %v, want nil", err)
+		}
+		if _, err := store.LoadCheckpoint(ctx, "doc"); !errors.Is(err, persistence.ErrNotFound) {
+			t.Fatalf("LoadCheckpoint after an accepted delete = %v, want ErrNotFound", err)
+		}
+	})
+
+	t.Run("deletion does not reset the fence high-water mark", func(t *testing.T) {
+		store := factory()
+		ctx := context.Background()
+		state := checkpointState(t, "state")
+		save := func(fence backend.Fence) error {
+			_, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
+				DocumentID: "doc", Fence: fence, Update: state, StateVector: checkpointVector(t, state),
+			})
+			return err
+		}
+		if err := save(2); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.Delete(ctx, persistence.DeleteRequest{DocumentID: "doc", Fence: 2}); err != nil {
+			t.Fatal(err)
+		}
+		// A store that forgets the epoch when it forgets the state lets a
+		// superseded owner write again the moment the document is deleted —
+		// which is exactly when a cascade is running and a stale node is most
+		// likely to still be trying.
+		if err := save(1); !errors.Is(err, persistence.ErrStaleFence) {
+			t.Fatalf("save from a superseded owner after deletion = %v, want ErrStaleFence", err)
+		}
+	})
+}

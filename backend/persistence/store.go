@@ -28,12 +28,27 @@ import (
 )
 
 var (
-	// ErrNotFound reports that no durable history exists for a document.
+	// ErrNotFound reports that the store holds NOTHING for a document — it was
+	// never saved, or was deleted.
+	//
+	// It must not be used for state the store knows about but cannot produce.
+	// A store that resolves a document through a pointer, finds the pointer set
+	// and the target gone, has not found "no history": reporting ErrNotFound
+	// there makes the caller treat a document that HAD content as new, seed it
+	// with create-time content, and overwrite the last good state on the next
+	// save. That is silent data loss arriving through the error type. Use
+	// ErrCorrupt.
 	ErrNotFound = errors.New("persistence: document not found")
 	// ErrConflict reports that a checkpoint basis is no longer admissible.
 	ErrConflict = errors.New("persistence: revision conflict")
-	// ErrCorrupt reports durable bytes that cannot form the history promised by
-	// a successful load.
+	// ErrCorrupt reports durable state the store cannot produce: bytes that
+	// cannot form the history a successful load promised, and equally state
+	// that is referenced but absent — a pointer whose target has gone.
+	//
+	// The distinction from ErrNotFound is load-bearing rather than cosmetic.
+	// ErrNotFound says "there was never anything here", which invites a caller
+	// to initialise. ErrCorrupt says "there was something and it cannot be
+	// returned", which must not.
 	ErrCorrupt = errors.New("persistence: corrupt history")
 	// ErrStaleFence reports a write from a superseded cluster owner.
 	ErrStaleFence = errors.New("persistence: stale fence")

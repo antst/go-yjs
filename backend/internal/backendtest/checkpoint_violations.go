@@ -41,6 +41,15 @@ const (
 	DeletePurgesEverything CheckpointViolation = "delete-purges-everything"
 	// DeleteIgnoresCancellation deletes anyway after the context is cancelled.
 	DeleteIgnoresCancellation CheckpointViolation = "delete-ignores-cancellation"
+	// DeleteBeforeFenceCheck removes the state and THEN validates the fence. It
+	// returns the correct error, so an error-only assertion passes, while the
+	// replacement owner's state has already been erased. Reported by an
+	// implementer who wrote exactly this on their first attempt.
+	DeleteBeforeFenceCheck CheckpointViolation = "delete-before-fence-check"
+	// DeleteResetsFence forgets the epoch when it forgets the state, letting a
+	// superseded owner write again the moment a document is deleted — which is
+	// precisely when a cascade is running and a stale node is still trying.
+	DeleteResetsFence CheckpointViolation = "delete-resets-fence"
 )
 
 // AllCheckpointViolations is every planted breach, so the rejection test cannot
@@ -52,6 +61,12 @@ var AllCheckpointViolations = []CheckpointViolation{
 // AllDeletionViolations is every planted breach of the Deleter contract.
 var AllDeletionViolations = []CheckpointViolation{
 	DeleteNotIdempotent, DeleteLeavesState, DeletePurgesEverything, DeleteIgnoresCancellation,
+}
+
+// AllFencedDeletionViolations is every planted breach only observable against a
+// FENCED store.
+var AllFencedDeletionViolations = []CheckpointViolation{
+	DeleteBeforeFenceCheck, DeleteResetsFence,
 }
 
 // BrokenCheckpointStore is the reference implementation with exactly one
@@ -132,8 +147,17 @@ func (b *BrokenCheckpointStore) Delete(ctx context.Context, request persistence.
 	}
 	b.mutex.Lock()
 	defer b.mutex.Unlock()
+	if b.violation == DeleteBeforeFenceCheck {
+		// Erase first, validate second: the error is right and the damage is done.
+		delete(b.states, request.DocumentID)
+	}
 	if err := acceptCheckpointFence(b.mode, b.fences, request.DocumentID, request.Fence); err != nil {
 		return err
+	}
+	if b.violation == DeleteResetsFence {
+		delete(b.states, request.DocumentID)
+		delete(b.fences, request.DocumentID)
+		return nil
 	}
 	switch b.violation {
 	case DeleteNotIdempotent:
