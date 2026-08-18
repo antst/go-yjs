@@ -42,6 +42,9 @@ func TestPersistenceDeletionContractFixture(t *testing.T) {
 	conformance.CheckpointPersistenceDeletion(t, func() persistence.DeletingCheckpointStore {
 		return backendtest.NewCheckpointStore()
 	})
+	conformance.CheckpointPersistenceDeletionFencing(t, func() persistence.DeletingCheckpointStore {
+		return backendtest.NewFencedCheckpointStore()
+	})
 }
 
 func TestClusterContractFixture(t *testing.T) {
