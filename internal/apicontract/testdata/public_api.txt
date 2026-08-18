@@ -26,6 +26,8 @@ backend/cluster var ErrLeaseLost
 backend/cluster var ErrNotFound
 backend/conformance field ClusterHarness.Advance func(time.Duration)
 backend/conformance field ClusterHarness.Coordinator cluster.Coordinator
+backend/conformance func CheckpointPersistence (*testing.T, CheckpointStoreFactory)
+backend/conformance func CheckpointPersistenceFencing (*testing.T, FencedCheckpointStoreFactory)
 backend/conformance func Cluster (*testing.T, ClusterFactory)
 backend/conformance func Hub (*testing.T, HubFactory)
 backend/conformance func Memory (*testing.T, RegistryFactory)
@@ -33,10 +35,12 @@ backend/conformance func Persistence (*testing.T, StoreFactory)
 backend/conformance func PersistenceCompaction (*testing.T, CompactingStoreFactory)
 backend/conformance func PersistenceFenceUpgrade (*testing.T, FenceUpgradeFactory)
 backend/conformance func PersistenceFencing (*testing.T, StoreFactory)
+backend/conformance type CheckpointStoreFactory () persistence.CheckpointStore
 backend/conformance type ClusterFactory () ClusterHarness
 backend/conformance type ClusterHarness struct
 backend/conformance type CompactingStoreFactory () persistence.CompactingStore
 backend/conformance type FenceUpgradeFactory () (persistence.Store, persistence.Store)
+backend/conformance type FencedCheckpointStoreFactory () persistence.CheckpointStore
 backend/conformance type HubFactory () hub.Hub
 backend/conformance type RegistryFactory () memory.Registry
 backend/conformance type StoreFactory () persistence.Store
@@ -109,13 +113,21 @@ backend/persistence field Page.Through Revision
 backend/persistence field Page.Updates []Record
 backend/persistence field Record.Revision Revision
 backend/persistence field Record.Update []byte
+backend/persistence field SaveCheckpointRequest.DocumentID backend.DocumentID
+backend/persistence field SaveCheckpointRequest.Fence backend.Fence
+backend/persistence field SaveCheckpointRequest.StateVector []byte
+backend/persistence field SaveCheckpointRequest.Update []byte
 backend/persistence method Appender.Append (context.Context, AppendRequest) (Revision, error)
+backend/persistence method CheckpointStore.FenceMode () FenceMode
+backend/persistence method CheckpointStore.LoadCheckpoint (context.Context, backend.DocumentID) (Checkpoint, error)
+backend/persistence method CheckpointStore.SaveCheckpoint (context.Context, SaveCheckpointRequest) (Revision, error)
 backend/persistence method Compactor.Compact (context.Context, CompactRequest) error
 backend/persistence method Loader.Load (context.Context, backend.DocumentID, LoadOptions) (Page, error)
 backend/persistence method Store.FenceMode () FenceMode
 backend/persistence type AppendRequest struct
 backend/persistence type Appender interface
 backend/persistence type Checkpoint struct
+backend/persistence type CheckpointStore interface
 backend/persistence type CompactRequest struct
 backend/persistence type CompactingStore interface
 backend/persistence type Compactor interface
@@ -126,6 +138,7 @@ backend/persistence type Page struct
 backend/persistence type PageToken string
 backend/persistence type Record struct
 backend/persistence type Revision uint64
+backend/persistence type SaveCheckpointRequest struct
 backend/persistence type Store interface
 backend/persistence var ErrConflict
 backend/persistence var ErrCorrupt
