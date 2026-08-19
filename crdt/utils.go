@@ -178,16 +178,6 @@ func stringTail(str string, offset Number) string {
 	return tail
 }
 
-// replaceChar replaces the character at the specified index in the given string with the given character.
-func replaceChar(str string, pos Number, char uint16) string {
-	if _, err := charCodeAt(str, pos); err != nil {
-		panic("index out of range")
-	}
-	left, tail := splitStringUTF16(str, pos)
-	_, right := splitStringUTF16(tail, 1)
-	return left + string(rune(char)) + right
-}
-
 // splitStringUTF16 splits str at a JavaScript/Yjs UTF-16 code-unit offset.
 // At an ordinary rune boundary the returned strings alias str's backing bytes;
 // the only allocation is the parity-required U+FFFD replacement when offset

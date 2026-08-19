@@ -644,26 +644,6 @@ func TestCharCodeAtUTF16(t *testing.T) {
 	}
 }
 
-func TestReplaceCharUTF16(t *testing.T) {
-	tests := []struct {
-		name string
-		pos  Number
-		want string
-	}{
-		{name: "bmp", pos: 0, want: "X😀b"},
-		{name: "high surrogate", pos: 1, want: "aX�b"},
-		{name: "low surrogate", pos: 2, want: "a�Xb"},
-		{name: "tail", pos: 3, want: "a😀X"},
-	}
-	for _, tc := range tests {
-		t.Run(tc.name, func(t *testing.T) {
-			if got := replaceChar("a😀b", tc.pos, 'X'); got != tc.want {
-				t.Fatalf("replaceChar at %d = %q, want %q", tc.pos, got, tc.want)
-			}
-		})
-	}
-}
-
 func TestUTF16HelpersRejectNegativeOrOutOfRangeOffsets(t *testing.T) {
 	t.Run("negative split", func(t *testing.T) {
 		defer func() {
@@ -672,13 +652,5 @@ func TestUTF16HelpersRejectNegativeOrOutOfRangeOffsets(t *testing.T) {
 			}
 		}()
 		splitStringUTF16("abc", -1)
-	})
-	t.Run("replace past end", func(t *testing.T) {
-		defer func() {
-			if recover() == nil {
-				t.Fatal("replaceChar unexpectedly accepted an out-of-range offset")
-			}
-		}()
-		replaceChar("abc", 3, 'X')
 	})
 }
