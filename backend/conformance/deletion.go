@@ -146,15 +146,34 @@ func PersistenceDeletionFencing(t *testing.T, factory FencedDeletingStoreFactory
 }
 
 // CheckpointPersistenceDeletion checks Deleter against the checkpoint profile.
+//
+// RUN IT AGAINST WHATEVER OWNS THE WHOLE DOCUMENT. The load-after-delete
+// assertion requires the implementation under test to own everything that makes
+// the document findable. A store that holds the content while another system
+// holds the pointer to it cannot satisfy that alone — after its delete the
+// pointer dangles, and ErrNotFound's contract requires ErrCorrupt there, not
+// ErrNotFound. Such a component is not a conforming Deleter and failing here is
+// the correct outcome; run the suite against the cascade that removes both.
+//
+// The seeds use a codec the store actually accepts. Hardcoding V1 here failed
+// every single-codec store by construction — the same stores CheckpointPersistence
+// deliberately accommodates with its ErrUnsupportedEncoding skip. Two suites in
+// one package disagreeing about whether a single-codec store is legitimate is a
+// defect in the suites, and the one saying no was wrong.
+//
+// One accepted codec is enough, unlike CheckpointPersistence which runs every
+// assertion against both: nothing here depends on how the state was encoded, only
+// on whether the store still holds it. The seed exists to give Delete something
+// to remove.
 func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStoreFactory) {
 	t.Helper()
+	seed := acceptedFixtures(t, func() persistence.CheckpointStore { return factory() }, "state")[0]
 
 	t.Run("delete removes the state", func(t *testing.T) {
 		store := factory()
 		ctx := context.Background()
-		update := checkpointState(t, "state")
 		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Encoding: persistence.EncodingV1, Update: update, StateVector: checkpointVector(t, update),
+			DocumentID: "doc", Encoding: seed.encoding, Update: seed.update, StateVector: seed.vector,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -172,9 +191,8 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 		if err := store.Delete(ctx, persistence.DeleteRequest{DocumentID: "never-saved"}); err != nil {
 			t.Fatalf("Delete of a document that never existed = %v, want nil", err)
 		}
-		update := checkpointState(t, "state")
 		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Encoding: persistence.EncodingV1, Update: update, StateVector: checkpointVector(t, update),
+			DocumentID: "doc", Encoding: seed.encoding, Update: seed.update, StateVector: seed.vector,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -188,10 +206,14 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 	t.Run("delete leaves other documents alone", func(t *testing.T) {
 		store := factory()
 		ctx := context.Background()
+		states := map[backend.DocumentID]checkpointFixture{
+			"alpha": fixtureIn(t, seed.encoding, "state-alpha"),
+			"beta":  fixtureIn(t, seed.encoding, "state-beta"),
+		}
 		for _, id := range []backend.DocumentID{"alpha", "beta"} {
-			update := checkpointState(t, "state-"+string(id))
 			if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-				DocumentID: id, Encoding: persistence.EncodingV1, Update: update, StateVector: checkpointVector(t, update),
+				DocumentID: id, Encoding: states[id].encoding,
+				Update: states[id].update, StateVector: states[id].vector,
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -203,7 +225,7 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 		if err != nil {
 			t.Fatalf("deleting alpha removed beta: %v", err)
 		}
-		if want := checkpointState(t, "state-beta"); string(got.Update) != string(want) {
+		if string(got.Update) != string(states["beta"].update) {
 			t.Fatal("deleting alpha changed beta's state")
 		}
 	})
@@ -231,6 +253,10 @@ type FencedDeletingCheckpointStoreFactory func() persistence.DeletingCheckpointS
 // missed.
 func CheckpointPersistenceDeletionFencing(t *testing.T, factory FencedDeletingCheckpointStoreFactory) {
 	t.Helper()
+	// Same reason as CheckpointPersistenceDeletion: seed with a codec the store
+	// takes, or a single-codec store fails on the seed and never reaches the
+	// fencing rules this suite exists to check.
+	seed := acceptedFixtures(t, func() persistence.CheckpointStore { return factory() }, "kept")[0]
 
 	t.Run("fenced mode rejects absent and stale authority", func(t *testing.T) {
 		store := factory()
@@ -238,9 +264,9 @@ func CheckpointPersistenceDeletionFencing(t *testing.T, factory FencedDeletingCh
 			t.Fatalf("fenced deleting checkpoint factory mode = %d, want Fenced", mode)
 		}
 		ctx := context.Background()
-		kept := checkpointState(t, "kept")
+		kept := seed.update
 		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Fence: 2, Encoding: persistence.EncodingV1, Update: kept, StateVector: checkpointVector(t, kept),
+			DocumentID: "doc", Fence: 2, Encoding: seed.encoding, Update: kept, StateVector: seed.vector,
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -275,10 +301,10 @@ func CheckpointPersistenceDeletionFencing(t *testing.T, factory FencedDeletingCh
 	t.Run("deletion does not reset the fence high-water mark", func(t *testing.T) {
 		store := factory()
 		ctx := context.Background()
-		state := checkpointState(t, "state")
+		state := fixtureIn(t, seed.encoding, "state")
 		save := func(fence backend.Fence) error {
 			_, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-				DocumentID: "doc", Fence: fence, Encoding: persistence.EncodingV1, Update: state, StateVector: checkpointVector(t, state),
+				DocumentID: "doc", Fence: fence, Encoding: state.encoding, Update: state.update, StateVector: state.vector,
 			})
 			return err
 		}

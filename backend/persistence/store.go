@@ -217,6 +217,17 @@ type CompactingStore interface {
 // fixtures were V1, which made the wrong decoder correct for the only bytes it
 // ever saw.
 //
+// GUESSING ALSO MANUFACTURES CAPABILITY, which is the harder failure to notice.
+// A sniffing store does not merely risk a wrong answer; it advertises handling a
+// codec the rest of the stack cannot handle. The same consumer had a passing
+// test asserting its store accepted V1 updates, while the layer above had
+// written and read V2 exclusively since its first commit and would have refused
+// those bytes outright. The test was true at the store boundary and false of the
+// system, and the sniffing was what made it true. A declared encoding removes a
+// lie rather than only a guess: a store that cannot record the codec says so
+// with ErrUnsupportedEncoding, and the capability it advertises is then the one
+// it has.
+//
 // VERIFYING A DECLARATION YOU DID NOT MAKE. A store often holds bytes it did
 // not encode: another system writes the document on create, or a migration
 // backfills it. Declaring an encoding for those bytes is a claim about that
@@ -388,6 +399,23 @@ type Deleter interface {
 	// IDEMPOTENT. Deleting a document with no durable state succeeds and
 	// returns nil. It must not report ErrNotFound: a cascade retries, and the
 	// second attempt must not fail the operation it is completing.
+	//
+	// THE ErrNotFound CLAUSE ASSUMES THIS STORE OWNS EVERYTHING THAT MAKES THE
+	// DOCUMENT FINDABLE. Where it does not, the two rules above collide with
+	// ErrNotFound's own: a store holding the content while another system holds
+	// the pointer to it leaves, after a successful delete, a pointer whose
+	// target is gone — and ErrNotFound explicitly forbids reporting that as
+	// ErrNotFound, because a caller then treats a document that HAD content as
+	// new and seeds it with create-time content. Deleting a document and having
+	// it return as its original content is worse than any load error.
+	//
+	// ErrCorrupt is correct in that window, and this clause does not override
+	// that. What it means is that a partial owner cannot satisfy Deleter alone:
+	// the load-after-delete guarantee belongs to whatever owns the whole
+	// document — the cascade that removes the content AND the pointer — and that
+	// is what should implement Deleter and be run against the deletion suite.
+	// A component store failing the suite on this rule has a shape mismatch, not
+	// a bug; a store that owns the whole document and fails it has a bug.
 	//
 	// Errors: ErrStaleFence when a superseded owner deletes, ErrFenceRequired
 	// when a fenced store receives fence zero, ErrUnexpectedFence when an

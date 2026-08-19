@@ -6,6 +6,7 @@ import (
 
 	"github.com/antst/go-yjs/backend"
 	"github.com/antst/go-yjs/backend/persistence"
+	"github.com/antst/go-yjs/crdt"
 )
 
 // CheckpointStore is a conforming in-memory reference for the single-current-
@@ -124,4 +125,82 @@ func acceptCheckpointEncoding(encoding persistence.CheckpointEncoding) error {
 	default:
 		return persistence.ErrUnsupportedEncoding
 	}
+}
+
+// BareUpdateCheckpointStore models the medium the checkpoint profile's two
+// permissions exist for: a store whose durable form is a bare Yjs update and
+// nothing else. With nowhere to record which codec produced the bytes it
+// supports exactly one and refuses the others with ErrUnsupportedEncoding, and
+// with nowhere to keep the state vector it DERIVES one on load.
+//
+// It exists because nothing else in this repository takes either shape. Every
+// other fixture accepts both codecs and stores the vector it was handed, so
+// acceptedFixtures' skip, its supported==0 guard, and the contract's permission
+// to read a checkpoint were all carried by the suites with no implementation to
+// exercise them. A carve-out that only the documentation travels is a promise
+// nobody has cashed: the code is correct, inert, and unfalsifiable by review,
+// because there is nothing wrong to read. The first consumer built this shape
+// for real and found two suite defects with it, which is the wrong place for
+// them to surface.
+//
+// Deriving the vector is also a check on the SUITE. A conforming deriving store
+// can only return the right bytes if every fixture's vector really is the
+// derivation of its update — so if a suite ever seeds a checkpoint with a vector
+// that does not match its update, this store fails and says so.
+type BareUpdateCheckpointStore struct {
+	*CheckpointStore
+	supported persistence.CheckpointEncoding
+}
+
+// NewBareUpdateCheckpointStore returns a store that keeps only update bytes.
+func NewBareUpdateCheckpointStore(supported persistence.CheckpointEncoding, mode persistence.FenceMode) *BareUpdateCheckpointStore {
+	inner := NewCheckpointStore()
+	inner.mode = mode
+	return &BareUpdateCheckpointStore{CheckpointStore: inner, supported: supported}
+}
+
+func (s *BareUpdateCheckpointStore) SaveCheckpoint(ctx context.Context, request persistence.SaveCheckpointRequest) (persistence.Revision, error) {
+	// Order matters: an unstated codec is a caller error whatever this store
+	// supports, so ErrEncodingRequired must not be reported as unsupported.
+	if err := acceptCheckpointEncoding(request.Encoding); err != nil {
+		return 0, err
+	}
+	if request.Encoding != s.supported {
+		return 0, persistence.ErrUnsupportedEncoding
+	}
+	revision, err := s.CheckpointStore.SaveCheckpoint(ctx, request)
+	if err != nil {
+		return 0, err
+	}
+	// The vector is not kept: this medium holds the update and nothing else.
+	s.mutex.Lock()
+	stored := s.states[request.DocumentID]
+	stored.StateVector = nil
+	s.states[request.DocumentID] = stored
+	s.mutex.Unlock()
+	return revision, nil
+}
+
+func (s *BareUpdateCheckpointStore) LoadCheckpoint(ctx context.Context, id backend.DocumentID) (persistence.Checkpoint, error) {
+	loaded, err := s.CheckpointStore.LoadCheckpoint(ctx, id)
+	if err != nil {
+		return persistence.Checkpoint{}, err
+	}
+	// Both fields are reconstructed rather than recalled: the codec from what
+	// this store is fixed to, the vector by decoding the update with it.
+	loaded.Encoding = s.supported
+	vector, err := deriveStateVector(s.supported, loaded.Update)
+	if err != nil {
+		// The stored bytes cannot form the state a successful save promised.
+		return persistence.Checkpoint{}, persistence.ErrCorrupt
+	}
+	loaded.StateVector = vector
+	return loaded, nil
+}
+
+func deriveStateVector(encoding persistence.CheckpointEncoding, update []byte) ([]byte, error) {
+	if encoding == persistence.EncodingV2 {
+		return crdt.EncodeStateVectorFromUpdateV2(update)
+	}
+	return crdt.EncodeStateVectorFromUpdate(update)
 }
