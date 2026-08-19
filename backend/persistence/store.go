@@ -179,6 +179,15 @@ type Loader interface {
 // Store is the minimum persistence implementation a backend must provide. Its
 // FenceMode is fixed when the implementation is constructed.
 //
+// SAFE FOR CONCURRENT USE, and this has to be said rather than inferred: a Go
+// type is not goroutine-safe unless its documentation says so, and a server
+// serves many documents and many sessions at once. Every method may be called
+// concurrently, on the same document and on different ones. The per-document
+// decisions are atomic — assigning a revision, admitting or rejecting a fence,
+// and installing a checkpoint each happen indivisibly, so no caller observes a
+// half-applied one. Without this sentence the concurrent clauses below constrain
+// outcomes that a single-threaded reading would never have to produce.
+//
 // Fence mode governs mutation authority, not the durable history format. A
 // Fenced store must be able to read history previously written through an
 // Unfenced store over the same data, and its first fenced mutation establishes
@@ -194,6 +203,13 @@ type Compactor interface {
 	// Compact is compare-and-swap against Basis. It must preserve concurrent
 	// appends after Basis and return ErrConflict when the basis cannot safely be
 	// installed.
+	//
+	// "Concurrent" is literal: appends may be in flight when Compact is called
+	// and may commit while it runs. On success the installed checkpoint covers
+	// exactly Basis, and every append acknowledged past Basis — whenever it
+	// committed — is still recoverable from the tail. Advancing the checkpoint's
+	// revision beyond Basis to account for appends it did not fold in is not a
+	// permitted way to satisfy that.
 	Compact(context.Context, CompactRequest) error
 }
 
@@ -317,6 +333,12 @@ type SaveCheckpointRequest struct {
 // The methods are name-qualified rather than Save/Load so that one type can
 // offer both profiles; Loader.Load already takes a different signature, and Go
 // would otherwise make the two mutually exclusive.
+// SAFE FOR CONCURRENT USE, on the same terms as Store: every method may be
+// called concurrently, and replacing the stored state is atomic. A checkpoint is
+// ONE value — a load never returns one save's update beside another save's state
+// vector. A store that writes the two halves in separate critical sections
+// violates this, and nothing downstream rejects the result: it decodes, and it
+// is wrong.
 type CheckpointStore interface {
 	// SaveCheckpoint returning nil means the state crossed the implementation's
 	// durability boundary. Revisions are strictly increasing per document.

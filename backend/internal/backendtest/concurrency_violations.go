@@ -39,6 +39,17 @@ const (
 	// check on the error path and hung until the test binary's own timeout,
 	// which says nothing about the store at all.
 	LoadFailsUnderConcurrentSaves ConcurrencyViolation = "load-fails-under-concurrent-saves"
+	// CompactionAdvancesCheckpointRevision discards the racing tail and then
+	// claims the checkpoint covers the current high-water mark. The bytes are
+	// still the basis's, so the claim is a lie: a suite that excuses everything
+	// at or below "whatever the checkpoint says it covers" writes off every lost
+	// append as folded in.
+	CompactionAdvancesCheckpointRevision ConcurrencyViolation = "compaction-advances-checkpoint-revision"
+	// CheckpointFenceValidatedThenReleased is the checkpoint profile's version
+	// of FenceValidatedThenReleased, and the damage is worse: this profile
+	// REPLACES the state on every save, so a superseded owner does not add a
+	// stale record, it overwrites the successor's document.
+	CheckpointFenceValidatedThenReleased ConcurrencyViolation = "checkpoint-fence-validated-then-released"
 )
 
 // AllStoreConcurrencyViolations are observable through the log-profile suites.
@@ -50,11 +61,18 @@ var AllStoreConcurrencyViolations = []ConcurrencyViolation{
 // AllCompactionConcurrencyViolations are observable through the compaction suite.
 var AllCompactionConcurrencyViolations = []ConcurrencyViolation{
 	CompactionDiscardsRacingAppend,
+	CompactionAdvancesCheckpointRevision,
 }
 
 // AllFencedConcurrencyViolations are observable only against a fenced store.
 var AllFencedConcurrencyViolations = []ConcurrencyViolation{
 	FenceValidatedThenReleased,
+}
+
+// AllFencedCheckpointConcurrencyViolations are observable only against a fenced
+// checkpoint store.
+var AllFencedCheckpointConcurrencyViolations = []ConcurrencyViolation{
+	CheckpointFenceValidatedThenReleased,
 }
 
 // AllCheckpointConcurrencyViolations are observable through the checkpoint suite.
@@ -67,7 +85,7 @@ var AllCheckpointConcurrencyViolations = []ConcurrencyViolation{
 // to hang the suite that is meant to be judging it: if the partner never
 // arrives, the defect simply does not fire and the case fails as "accepted",
 // which is a legible result rather than a stuck test binary.
-const rendezvousTimeout = 2 * time.Second
+const rendezvousTimeout = 750 * time.Millisecond
 
 // tornWindow is how long a torn checkpoint stays observable. It is generous on
 // purpose: this fixture exists to prove the suite LOOKS during the race, and a
@@ -219,7 +237,7 @@ func (s *BrokenConcurrentStore) Append(ctx context.Context, request persistence.
 		s.data.mu.Unlock()
 		return revision, nil
 
-	case CompactionDiscardsRacingAppend:
+	case CompactionDiscardsRacingAppend, CompactionAdvancesCheckpointRevision:
 		if s.appends.Add(1) == 1 {
 			return s.Store.Append(ctx, request) // the basis, established before the race
 		}
@@ -280,7 +298,7 @@ func (s *BrokenConcurrentStore) Append(ctx context.Context, request persistence.
 }
 
 func (s *BrokenConcurrentStore) Compact(ctx context.Context, request persistence.CompactRequest) error {
-	if s.violation != CompactionDiscardsRacingAppend {
+	if s.violation != CompactionDiscardsRacingAppend && s.violation != CompactionAdvancesCheckpointRevision {
 		return s.Store.Compact(ctx, request)
 	}
 	if err := ctx.Err(); err != nil {
@@ -301,8 +319,15 @@ func (s *BrokenConcurrentStore) Compact(ctx context.Context, request persistence
 	if err := acceptFence(s.mode, document, request.Fence); err != nil {
 		return err
 	}
+	covered := request.Basis
+	if s.violation == CompactionAdvancesCheckpointRevision {
+		// Claims to cover everything written so far while storing only the
+		// basis's bytes — the discarded appends are then indistinguishable from
+		// appends the checkpoint folded in.
+		covered = document.revision
+	}
 	document.checkpoint = &persistence.Checkpoint{
-		Revision:    request.Basis,
+		Revision:    covered,
 		Update:      append([]byte(nil), request.CheckpointUpdate...),
 		StateVector: append([]byte(nil), request.StateVector...),
 	}
@@ -315,8 +340,10 @@ func (s *BrokenConcurrentStore) Compact(ctx context.Context, request persistence
 // defect.
 type BrokenConcurrentCheckpointStore struct {
 	*CheckpointStore
-	violation ConcurrencyViolation
-	saving    atomic.Int64
+	violation          ConcurrencyViolation
+	saving             atomic.Int64
+	staleValidated     *signal
+	successorCommitted *signal
 }
 
 func (s *BrokenConcurrentCheckpointStore) LoadCheckpoint(ctx context.Context, id backend.DocumentID) (persistence.Checkpoint, error) {
@@ -333,10 +360,18 @@ func NewBrokenConcurrentCheckpointStore(violation ConcurrencyViolation, mode per
 	if mode == persistence.Fenced {
 		inner = NewFencedCheckpointStore()
 	}
-	return &BrokenConcurrentCheckpointStore{CheckpointStore: inner, violation: violation}
+	return &BrokenConcurrentCheckpointStore{
+		CheckpointStore:    inner,
+		violation:          violation,
+		staleValidated:     newSignal(),
+		successorCommitted: newSignal(),
+	}
 }
 
 func (s *BrokenConcurrentCheckpointStore) SaveCheckpoint(ctx context.Context, request persistence.SaveCheckpointRequest) (persistence.Revision, error) {
+	if s.violation == CheckpointFenceValidatedThenReleased {
+		return s.saveWithReleasedFence(ctx, request)
+	}
 	if s.violation == LoadFailsUnderConcurrentSaves {
 		s.saving.Add(1)
 		defer s.saving.Add(-1)
@@ -381,5 +416,56 @@ func (s *BrokenConcurrentCheckpointStore) SaveCheckpoint(ctx context.Context, re
 	stored.StateVector = append([]byte(nil), request.StateVector...)
 	s.states[request.DocumentID] = stored
 	s.mutex.Unlock()
+	return revision, nil
+}
+
+// saveWithReleasedFence validates the fence, drops the lock, and writes
+// afterwards. The successor waits BEFORE validating: validation raises the
+// stored fence, so a successor that validates first makes every later stale
+// validation fail correctly and the defect never occurs — which a rejection test
+// cannot tell apart from the suite missing it.
+func (s *BrokenConcurrentCheckpointStore) saveWithReleasedFence(ctx context.Context, request persistence.SaveCheckpointRequest) (persistence.Revision, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, err
+	}
+	if request.Fence > 1 {
+		s.staleValidated.await()
+	}
+
+	s.mutex.Lock()
+	if err := acceptCheckpointEncoding(request.Encoding); err != nil {
+		s.mutex.Unlock()
+		return 0, err
+	}
+	if err := acceptCheckpointFence(s.mode, s.fences, request.DocumentID, request.Fence); err != nil {
+		s.mutex.Unlock()
+		if request.Fence == 1 {
+			s.staleValidated.fire()
+		}
+		return 0, err
+	}
+	s.mutex.Unlock()
+
+	if request.Fence == 1 {
+		s.staleValidated.fire()
+		s.successorCommitted.await()
+	}
+
+	s.mutex.Lock()
+	s.revision++
+	revision := s.revision
+	s.states[request.DocumentID] = persistence.Checkpoint{
+		Revision:    revision,
+		Encoding:    request.Encoding,
+		Update:      append([]byte(nil), request.Update...),
+		StateVector: append([]byte(nil), request.StateVector...),
+	}
+	if request.Fence != 0 && request.Fence > s.fences[request.DocumentID] {
+		s.fences[request.DocumentID] = request.Fence
+	}
+	s.mutex.Unlock()
+	if request.Fence > 1 {
+		s.successorCommitted.fire()
+	}
 	return revision, nil
 }

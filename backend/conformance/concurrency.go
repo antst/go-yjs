@@ -12,24 +12,21 @@ import (
 	"github.com/antst/go-yjs/backend/persistence"
 )
 
-// The other suites in this package drive one caller at a time. That leaves the
-// contract's concurrent clauses uncertified: Appender promises a revision
-// "greater than every previously acknowledged revision", and Compactor promises
-// to "preserve concurrent appends after Basis" — a sentence with no concurrent
-// test behind it, because "racing append survives compaction" races nothing and
-// runs entirely in program order.
+// The rest of this package drives one caller at a time. That left the contract's
+// concurrent clauses uncertified: Store promises its methods are safe for
+// concurrent use with atomic per-document decisions, Appender promises a
+// revision "greater than every previously acknowledged revision", and Compactor
+// promises to "preserve concurrent appends after Basis" — a sentence whose only
+// test, "racing append survives compaction", runs entirely in program order.
 //
-// These suites are therefore genuinely concurrent, and the assertions are chosen
-// so that they hold under EVERY interleaving rather than describing one. A
-// concurrency test whose expected result depends on who won is a flake with a
-// justification attached.
+// NONE OF THIS IS EXPORTED. Concurrency is not an optional capability of a
+// persistence store, so a suite a consumer could omit would let a store claim
+// conformance while skipping the rules hardest to satisfy. The canonical
+// entrypoints call these; there is no opt-out.
 //
-// Two failure modes are guarded against deliberately. A suite that spawns N
-// callers proves nothing if the store serialises them into one operation, so
-// every suite here asserts the COUNT of operations that actually reached the
-// store, not only the outcome. And a suite that accepts "some appends failed"
-// can pass against a store that fails all of them, so each requires the work to
-// have actually been done.
+// The assertions are chosen to hold under EVERY interleaving rather than to
+// describe one. A concurrency test whose expected result depends on who won is a
+// flake with a justification attached.
 
 // concurrentAppend is one caller's outcome, kept so the assertions can be made
 // over the acknowledged set rather than over the attempts.
@@ -62,10 +59,7 @@ func runConcurrently(workers int, work func(i int)) {
 	done.Wait()
 }
 
-// PersistenceConcurrency certifies the append contract under concurrent callers.
-// A single-threaded store passes it unchanged; it exists to fail stores whose
-// ordering is only correct when nobody else is writing.
-func PersistenceConcurrency(t *testing.T, factory StoreFactory) {
+func persistenceConcurrency(t *testing.T, factory StoreFactory) {
 	t.Helper()
 
 	t.Run("concurrent appends are all durable with distinct increasing revisions", func(t *testing.T) {
@@ -94,7 +88,8 @@ func PersistenceConcurrency(t *testing.T, factory StoreFactory) {
 
 		history := loadComplete(t, store, "doc", 0)
 		if len(history) != writers {
-			t.Fatalf("history has %d records, want %d; an acknowledged append was lost", len(history), writers)
+			t.Fatalf("history has %d records, want %d; an acknowledged append was lost under concurrency",
+				len(history), writers)
 		}
 		var previous persistence.Revision
 		for i, record := range history {
@@ -113,7 +108,8 @@ func PersistenceConcurrency(t *testing.T, factory StoreFactory) {
 			delete(acknowledged, record.Revision)
 		}
 		if len(acknowledged) != 0 {
-			t.Fatalf("%d acknowledged appends are missing from history: %v", len(acknowledged), acknowledged)
+			t.Fatalf("%d acknowledged appends are missing from history; an acknowledged append was lost under concurrency",
+				len(acknowledged))
 		}
 	})
 
@@ -121,15 +117,21 @@ func PersistenceConcurrency(t *testing.T, factory StoreFactory) {
 		store := factory()
 		const documents = 8
 		const perDocument = 6
+		errs := make([]error, documents*perDocument)
 		runConcurrently(documents*perDocument, func(i int) {
 			document := backend.DocumentID(fmt.Sprintf("doc-%d", i/perDocument))
-			_, err := store.Append(context.Background(), persistence.AppendRequest{
+			_, errs[i] = store.Append(context.Background(), persistence.AppendRequest{
 				DocumentID: document, Update: []byte(fmt.Sprintf("u-%d", i)),
 			})
-			if err != nil {
-				panic(fmt.Sprintf("Append(%s) = %v", document, err))
-			}
 		})
+		// Reported from the test goroutine, never panicked from a worker: a
+		// reusable suite must name the contract that was violated rather than
+		// crash through the harness running it.
+		for i, err := range errs {
+			if err != nil {
+				t.Fatalf("Append to doc-%d = %v", i/perDocument, err)
+			}
+		}
 		for d := range documents {
 			document := backend.DocumentID(fmt.Sprintf("doc-%d", d))
 			history := loadComplete(t, store, document, 0)
@@ -141,11 +143,7 @@ func PersistenceConcurrency(t *testing.T, factory StoreFactory) {
 	})
 }
 
-// PersistenceCompactionConcurrency certifies the sentence in the Compactor
-// contract that says "preserve concurrent appends after Basis". The compaction
-// suite's own case establishes the sequential CAS behaviour; this one actually
-// runs appends alongside the compaction.
-func PersistenceCompactionConcurrency(t *testing.T, factory CompactingStoreFactory) {
+func persistenceCompactionConcurrency(t *testing.T, factory CompactingStoreFactory) {
 	t.Helper()
 
 	t.Run("appends racing a compaction are never lost", func(t *testing.T) {
@@ -159,9 +157,9 @@ func PersistenceCompactionConcurrency(t *testing.T, factory CompactingStoreFacto
 		const writers = 16
 		results := make([]concurrentAppend, writers)
 		var compactErr error
-		// The compaction is worker 0 so it is released by the same barrier as
-		// the appends; sequencing it before or after would reproduce the
-		// sequential test this suite exists to complement.
+		// The compaction is worker 0 so the same barrier releases it and the
+		// appends; sequencing it before or after reproduces the sequential test
+		// this exists to complement.
 		runConcurrently(writers+1, func(i int) {
 			if i == 0 {
 				compactErr = store.Compact(ctx, persistence.CompactRequest{
@@ -197,44 +195,52 @@ func PersistenceCompactionConcurrency(t *testing.T, factory CompactingStoreFacto
 		if err != nil {
 			t.Fatal(err)
 		}
-		covered := persistence.Revision(0)
-		if page.Checkpoint != nil {
-			covered = page.Checkpoint.Revision
+		// The checkpoint must cover EXACTLY the requested basis. Excusing
+		// anything at or below "whatever revision the checkpoint claims" hands a
+		// broken store the answer: advance the claim to the current high-water
+		// mark, discard the tail, and every lost append is written off as folded
+		// in. The bytes are still the basis's, so the claim is a lie no caller
+		// can detect.
+		if compactErr == nil {
+			if page.Checkpoint == nil {
+				t.Fatal("Compact succeeded but no checkpoint was installed")
+			}
+			if page.Checkpoint.Revision != basis {
+				t.Fatalf("checkpoint claims revision %d for a compaction whose basis was %d; a compaction discarded a concurrent append by claiming to cover it",
+					page.Checkpoint.Revision, basis)
+			}
 		}
-		found := make(map[persistence.Revision]struct{}, writers)
+		found := make(map[persistence.Revision]struct{}, len(page.Updates))
 		for _, record := range page.Updates {
 			found[record.Revision] = struct{}{}
 		}
+		// Every racing append was acknowledged after the basis, so every one of
+		// them belongs in the tail whether the compaction succeeded or conflicted.
 		for revision, payload := range acknowledged {
-			if revision <= covered {
-				// Folded into the checkpoint is a legitimate outcome only if the
-				// compaction's basis actually reached it.
-				continue
+			if revision <= basis {
+				t.Fatalf("append %q was acknowledged at revision %d, at or below the basis %d; revisions did not advance",
+					payload, revision, basis)
 			}
 			if _, present := found[revision]; !present {
-				t.Fatalf("append %q at revision %d was acknowledged, is past the checkpoint at %d, and is not in the tail; a compaction discarded a concurrent append",
-					payload, revision, covered)
+				t.Fatalf("append %q at revision %d was acknowledged past the basis %d and is not in the tail; a compaction discarded a concurrent append",
+					payload, revision, basis)
 			}
 		}
 	})
 }
 
-// PersistenceFencingConcurrency certifies that fence authority is decided by a
+// persistenceFencingConcurrency certifies that fence authority is decided by a
 // single order, not by whichever owner happens to be scheduled. A store that
-// checks the fence and then writes without holding the two together lets a
-// superseded owner land a write after its successor's — which is the exact
-// scenario fencing exists to prevent, and the one a sequential test cannot see.
-func PersistenceFencingConcurrency(t *testing.T, factory StoreFactory) {
+// validates the fence and then writes without holding the two together lets a
+// superseded owner land a write after its successor's — the exact scenario
+// fencing exists to prevent, and one a sequential test cannot see.
+func persistenceFencingConcurrency(t *testing.T, factory StoreFactory) {
 	t.Helper()
-	if mode := factory().FenceMode(); mode != persistence.Fenced {
-		t.Fatalf("fencing concurrency factory mode = %d, want Fenced", mode)
-	}
 
 	t.Run("a superseded owner never lands a write after its successor", func(t *testing.T) {
 		store := factory()
 		const rounds = 16
 		results := make([]concurrentAppend, rounds*2)
-		// Old and new owner interleaved, so neither is systematically first.
 		runConcurrently(rounds*2, func(i int) {
 			fence := backend.Fence(1)
 			if i%2 == 1 {
@@ -258,13 +264,13 @@ func PersistenceFencingConcurrency(t *testing.T, factory StoreFactory) {
 			}
 		}
 		if len(accepted) == 0 {
-			t.Fatal("every append was rejected; the suite would pass vacuously")
+			t.Fatal("every append was rejected; this subtest would pass vacuously")
 		}
 
 		// THE PROPERTY: order the accepted writes by the order the store itself
 		// assigned them, and the fences along that order must never go back
-		// down. A single stale write landing after a newer one is exactly the
-		// split-brain fencing prevents, and it shows up here as a decrease.
+		// down. One stale write landing after a newer one is the split-brain
+		// fencing prevents, and it appears here as a decrease.
 		sort.Slice(accepted, func(i, j int) bool { return accepted[i].revision < accepted[j].revision })
 		highest := backend.Fence(0)
 		for _, r := range accepted {
@@ -274,12 +280,11 @@ func PersistenceFencingConcurrency(t *testing.T, factory StoreFactory) {
 			}
 			highest = r.fence
 		}
-
-		// And the decision must be durable: once the successor has written, the
-		// superseded owner is refused from then on.
 		if highest < 2 {
 			t.Fatalf("the successor never wrote (highest accepted fence %d); this run certified nothing", highest)
 		}
+
+		// And the decision is durable: the superseded owner is refused from now on.
 		_, err := store.Append(context.Background(), persistence.AppendRequest{
 			DocumentID: "doc", Fence: 1, Update: []byte("after"),
 		})
@@ -289,18 +294,14 @@ func PersistenceFencingConcurrency(t *testing.T, factory StoreFactory) {
 	})
 }
 
-// CheckpointPersistenceConcurrency certifies that a checkpoint is one value.
-// The profile keeps a single rewritable blob, so a store that writes the update
-// and the state vector as two steps can serve one save's update beside another
-// save's vector. Nothing rejects that pairing: it decodes, and it is wrong —
-// the same silent shape as an undeclared codec.
-func CheckpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFactory) {
+// checkpointPersistenceConcurrency certifies that a checkpoint is ONE value. The
+// profile keeps a single rewritable blob, so a store that writes the update and
+// the state vector in two steps can serve one save's update beside another
+// save's vector. Nothing downstream rejects that pairing: it decodes, and it is
+// wrong — the same silent shape as an undeclared codec.
+func checkpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFactory) {
 	t.Helper()
-	fixtures := acceptedFixtures(t, factory, "concurrent")
-	if len(fixtures) == 0 {
-		t.Fatal("the store accepted no checkpoint encoding")
-	}
-	fixture := fixtures[0]
+	fixture := acceptedFixtures(t, factory, "concurrent")[0]
 	fenced := factory().FenceMode() == persistence.Fenced
 
 	t.Run("a load never returns a mixture of two saves", func(t *testing.T) {
@@ -310,69 +311,57 @@ func CheckpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFacto
 		// document's state and a store is entitled to read it — one whose medium
 		// cannot keep the state vector must decode the update to return a
 		// correct one. Feeding arbitrary bytes fails such a store for honouring
-		// a permission the contract grants, which is the rule the rest of this
-		// package already follows.
+		// a permission the contract grants.
 		saves := make([]checkpointFixture, writers)
 		pairs := make(map[string]string, writers+1)
 		for i := range writers {
 			saves[i] = fixtureIn(t, fixture.encoding, fmt.Sprintf("state-%02d", i))
 			pairs[string(saves[i].update)] = string(saves[i].vector)
 		}
-		// Seeded before the race so a reader always has something to load. On a
-		// fast store every save can complete between two reader iterations, and
-		// the readers then observe only ErrNotFound.
+		// Seeded before the race so a reader always has something to load: on a
+		// fast store every save can complete between two reader iterations.
 		seed := fixtureIn(t, fixture.encoding, "state-seed")
 		pairs[string(seed.update)] = string(seed.vector)
-		seedRequest := persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Encoding: seed.encoding, Update: seed.update, StateVector: seed.vector,
-		}
-		if fenced {
-			seedRequest.Fence = 1
-		}
-		if _, err := store.SaveCheckpoint(context.Background(), seedRequest); err != nil {
+		if _, err := store.SaveCheckpoint(context.Background(), checkpointSave(seed, fenced, 1)); err != nil {
 			t.Fatal(err)
 		}
 
 		revisions := make([]persistence.Revision, writers)
 		saveErrs := make([]error, writers)
-		// Readers run FOR THE DURATION of the writes rather than after them. A
-		// torn checkpoint is a state the store passes through, so a suite that
-		// only inspects the store once every writer has finished cannot see one
-		// at all — it observes whatever the last writer left, which is usually
-		// consistent no matter how the halves were written.
 		const readers = 4
-		done := make(chan struct{})
-		type mixture struct {
-			update, vector, want string
-		}
+		type mixture struct{ vector, want string }
 		mixtures := make([]*mixture, readers)
 		loads := make([]int, readers)
 		loadErrs := make([]error, readers)
 
+		// done closes when EVERY save has returned, not when one particular
+		// worker has. Closing it from the highest-index writer let that single
+		// goroutine finish first and stop all the readers while fifteen saves
+		// were still in flight, which made "readers run for the duration of the
+		// writes" false exactly when it mattered.
+		done := make(chan struct{})
+		var writing sync.WaitGroup
+		writing.Add(writers)
+		go func() { writing.Wait(); close(done) }()
+
 		runConcurrently(writers+readers, func(i int) {
 			if i >= writers {
 				r := i - writers
-				// EVERY path through this loop reaches the done check. An
-				// earlier version skipped it on the error path, so a store that
-				// failed every load spun here until the test binary's own
-				// timeout killed it — a hang rather than a failure, and the
-				// suite reporting nothing at all about the store.
+				// EVERY path reaches the done check. An earlier version skipped
+				// it on the error path, so a store that failed every load spun
+				// here until the test binary's own timeout — a hang, which says
+				// nothing at all about the store.
 				for {
 					loaded, err := store.LoadCheckpoint(context.Background(), "doc")
-					switch {
-					case err != nil:
+					if err != nil {
 						if loadErrs[r] == nil {
 							loadErrs[r] = err
 						}
-					default:
+					} else {
 						loads[r]++
 						if want, known := pairs[string(loaded.Update)]; known &&
 							string(loaded.StateVector) != want && mixtures[r] == nil {
-							mixtures[r] = &mixture{
-								update: string(loaded.Update),
-								vector: string(loaded.StateVector),
-								want:   want,
-							}
+							mixtures[r] = &mixture{vector: string(loaded.StateVector), want: want}
 						}
 					}
 					select {
@@ -382,30 +371,20 @@ func CheckpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFacto
 					}
 				}
 			}
-			request := persistence.SaveCheckpointRequest{
-				DocumentID:  "doc",
-				Encoding:    saves[i].encoding,
-				Update:      saves[i].update,
-				StateVector: saves[i].vector,
-			}
-			if fenced {
-				request.Fence = 1
-			}
-			revisions[i], saveErrs[i] = store.SaveCheckpoint(context.Background(), request)
-			if i == writers-1 {
-				close(done)
-			}
+			defer writing.Done()
+			revisions[i], saveErrs[i] = store.SaveCheckpoint(
+				context.Background(), checkpointSave(saves[i], fenced, 1))
 		})
 
-		seenRevisions := make(map[persistence.Revision]struct{}, writers)
+		seen := make(map[persistence.Revision]struct{}, writers)
 		for i, err := range saveErrs {
 			if err != nil {
 				t.Fatalf("SaveCheckpoint(%d) = %v", i, err)
 			}
-			if _, duplicate := seenRevisions[revisions[i]]; duplicate {
+			if _, duplicate := seen[revisions[i]]; duplicate {
 				t.Fatalf("revision %d returned twice; checkpoint revisions are not strictly increasing under concurrency", revisions[i])
 			}
-			seenRevisions[revisions[i]] = struct{}{}
+			seen[revisions[i]] = struct{}{}
 		}
 		for r, err := range loadErrs {
 			if err != nil {
@@ -413,12 +392,6 @@ func CheckpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFacto
 			}
 		}
 
-		// Every reader completes at least one load, so this can only fire if the
-		// reader loop stopped doing its job. It does NOT claim the loads
-		// overlapped the saves: against a store fast enough to finish every save
-		// before a reader is scheduled they observe the settled value instead.
-		// The suite is still known to catch a tear — backendtest's
-		// torn-checkpoint fixture is rejected by exactly this subtest.
 		total := 0
 		for _, n := range loads {
 			total += n
@@ -428,8 +401,8 @@ func CheckpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFacto
 		}
 		for r, m := range mixtures {
 			if m != nil {
-				t.Fatalf("reader %d loaded an update beside a state vector belonging to a different save (%d loads observed): got vector %x, want %x",
-					r, total, m.vector, m.want)
+				t.Fatalf("reader %d loaded an update beside a state vector from a different save: got %x, want %x; the checkpoint was torn across two saves",
+					r, m.vector, m.want)
 			}
 		}
 
@@ -442,11 +415,95 @@ func CheckpointPersistenceConcurrency(t *testing.T, factory CheckpointStoreFacto
 			t.Fatal("the settled load returned an update no save wrote")
 		}
 		if string(loaded.StateVector) != wantVector {
-			t.Fatalf("the settled checkpoint pairs an update with another save's state vector: got %x, want %x",
+			t.Fatalf("the settled checkpoint pairs an update with another save's state vector: got %x, want %x; the checkpoint was torn across two saves",
 				loaded.StateVector, wantVector)
 		}
 		if loaded.Encoding != fixture.encoding {
 			t.Fatalf("load returned encoding %d, want %d", loaded.Encoding, fixture.encoding)
 		}
 	})
+}
+
+// checkpointPersistenceFencingConcurrency is the checkpoint profile's analogue
+// of the log profile's fence race, and it is not redundant: this profile
+// REPLACES the whole state on every save, so a superseded owner writing after
+// its successor does not add a stale record, it overwrites the current one. The
+// concurrency suite above uses one fence for every save and cannot see it.
+func checkpointPersistenceFencingConcurrency(t *testing.T, factory FencedCheckpointStoreFactory) {
+	t.Helper()
+	fixture := acceptedFixtures(t, func() persistence.CheckpointStore { return factory() }, "fenced-concurrent")[0]
+
+	t.Run("a superseded owner never overwrites its successor's state", func(t *testing.T) {
+		store := factory()
+		const rounds = 16
+		stale := fixtureIn(t, fixture.encoding, "stale-owner-state")
+		fresh := fixtureIn(t, fixture.encoding, "successor-state")
+
+		type outcome struct {
+			fence    backend.Fence
+			revision persistence.Revision
+			err      error
+		}
+		results := make([]outcome, rounds*2)
+		runConcurrently(rounds*2, func(i int) {
+			state, fence := stale, backend.Fence(1)
+			if i%2 == 1 {
+				state, fence = fresh, backend.Fence(2)
+			}
+			revision, err := store.SaveCheckpoint(context.Background(), checkpointSave(state, true, fence))
+			results[i] = outcome{fence: fence, revision: revision, err: err}
+		})
+
+		var accepted []outcome
+		for _, r := range results {
+			switch {
+			case r.err == nil:
+				accepted = append(accepted, r)
+			case errors.Is(r.err, persistence.ErrStaleFence):
+			default:
+				t.Fatalf("SaveCheckpoint at fence %d = %v, want nil or ErrStaleFence", r.fence, r.err)
+			}
+		}
+		if len(accepted) == 0 {
+			t.Fatal("every save was rejected; this subtest would pass vacuously")
+		}
+		sort.Slice(accepted, func(i, j int) bool { return accepted[i].revision < accepted[j].revision })
+		highest := backend.Fence(0)
+		for _, r := range accepted {
+			if r.fence < highest {
+				t.Fatalf("revision %d was saved at fence %d after fence %d had already been accepted; a superseded owner wrote after its successor",
+					r.revision, r.fence, highest)
+			}
+			highest = r.fence
+		}
+		if highest < 2 {
+			t.Fatalf("the successor never saved (highest accepted fence %d); this run certified nothing", highest)
+		}
+
+		// The durable state is what actually matters: an ordering that looked
+		// monotone by revision is worthless if the stale owner's bytes are the
+		// ones left behind.
+		loaded, err := store.LoadCheckpoint(context.Background(), "doc")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if string(loaded.Update) == string(stale.update) {
+			t.Fatal("the durable checkpoint holds the superseded owner's state; a superseded owner wrote after its successor")
+		}
+		if string(loaded.Update) != string(fresh.update) {
+			t.Fatal("the durable checkpoint holds neither owner's state")
+		}
+	})
+}
+
+// checkpointSave builds a save request, applying the fence only where the store
+// requires one.
+func checkpointSave(f checkpointFixture, fenced bool, fence backend.Fence) persistence.SaveCheckpointRequest {
+	request := persistence.SaveCheckpointRequest{
+		DocumentID: "doc", Encoding: f.encoding, Update: f.update, StateVector: f.vector,
+	}
+	if fenced {
+		request.Fence = fence
+	}
+	return request
 }

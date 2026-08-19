@@ -115,6 +115,7 @@ func Persistence(t *testing.T, factory StoreFactory) {
 			t.Fatalf("Load cancelled = %v, want context.Canceled", err)
 		}
 	})
+	persistenceConcurrency(t, factory)
 }
 
 // PersistenceCompaction runs the optional checkpoint and compaction contract.
@@ -165,6 +166,7 @@ func PersistenceCompaction(t *testing.T, factory CompactingStoreFactory) {
 			t.Fatalf("checkpoint changed through returned alias: %#v", again.Checkpoint)
 		}
 	})
+	persistenceCompactionConcurrency(t, factory)
 }
 
 // PersistenceFencing runs the optional clustered-write contract. A backend
@@ -204,6 +206,7 @@ func PersistenceFencing(t *testing.T, factory StoreFactory) {
 			}
 		}
 	})
+	persistenceFencingConcurrency(t, factory)
 }
 
 // PersistenceFenceUpgrade proves that enabling clustering changes write

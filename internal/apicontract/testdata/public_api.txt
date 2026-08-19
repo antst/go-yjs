@@ -27,7 +27,6 @@ backend/cluster var ErrNotFound
 backend/conformance field ClusterHarness.Advance func(time.Duration)
 backend/conformance field ClusterHarness.Coordinator cluster.Coordinator
 backend/conformance func CheckpointPersistence (*testing.T, CheckpointStoreFactory)
-backend/conformance func CheckpointPersistenceConcurrency (*testing.T, CheckpointStoreFactory)
 backend/conformance func CheckpointPersistenceDeletion (*testing.T, DeletingCheckpointStoreFactory)
 backend/conformance func CheckpointPersistenceDeletionFencing (*testing.T, FencedDeletingCheckpointStoreFactory)
 backend/conformance func CheckpointPersistenceFencing (*testing.T, FencedCheckpointStoreFactory)
@@ -36,13 +35,10 @@ backend/conformance func Hub (*testing.T, HubFactory)
 backend/conformance func Memory (*testing.T, RegistryFactory)
 backend/conformance func Persistence (*testing.T, StoreFactory)
 backend/conformance func PersistenceCompaction (*testing.T, CompactingStoreFactory)
-backend/conformance func PersistenceCompactionConcurrency (*testing.T, CompactingStoreFactory)
-backend/conformance func PersistenceConcurrency (*testing.T, StoreFactory)
 backend/conformance func PersistenceDeletion (*testing.T, DeletingStoreFactory)
 backend/conformance func PersistenceDeletionFencing (*testing.T, FencedDeletingStoreFactory)
 backend/conformance func PersistenceFenceUpgrade (*testing.T, FenceUpgradeFactory)
 backend/conformance func PersistenceFencing (*testing.T, StoreFactory)
-backend/conformance func PersistenceFencingConcurrency (*testing.T, StoreFactory)
 backend/conformance type CheckpointStoreFactory () persistence.CheckpointStore
 backend/conformance type ClusterFactory () ClusterHarness
 backend/conformance type ClusterHarness struct

@@ -324,6 +324,7 @@ func CheckpointPersistence(t *testing.T, factory CheckpointStoreFactory) {
 			t.Fatal("LoadCheckpoint on a cancelled context returned nil")
 		}
 	})
+	checkpointPersistenceConcurrency(t, factory)
 }
 
 // CheckpointPersistenceFencing checks the clustered profile. Run it only
@@ -384,4 +385,5 @@ func CheckpointPersistenceFencing(t *testing.T, factory FencedCheckpointStoreFac
 			t.Fatalf("LoadCheckpoint on a fenced store = %v, want success", err)
 		}
 	})
+	checkpointPersistenceFencingConcurrency(t, factory)
 }
