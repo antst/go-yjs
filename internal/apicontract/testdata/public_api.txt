@@ -99,11 +99,15 @@ backend/memory type Registry interface
 backend/memory var ErrClosed
 backend/memory var ErrInUse
 backend/memory var ErrInvalidDocument
+backend/persistence const EncodingUnspecified
+backend/persistence const EncodingV1
+backend/persistence const EncodingV2
 backend/persistence const Fenced
 backend/persistence const Unfenced
 backend/persistence field AppendRequest.DocumentID backend.DocumentID
 backend/persistence field AppendRequest.Fence backend.Fence
 backend/persistence field AppendRequest.Update []byte
+backend/persistence field Checkpoint.Encoding CheckpointEncoding
 backend/persistence field Checkpoint.Revision Revision
 backend/persistence field Checkpoint.StateVector []byte
 backend/persistence field Checkpoint.Update []byte
@@ -124,6 +128,7 @@ backend/persistence field Page.Updates []Record
 backend/persistence field Record.Revision Revision
 backend/persistence field Record.Update []byte
 backend/persistence field SaveCheckpointRequest.DocumentID backend.DocumentID
+backend/persistence field SaveCheckpointRequest.Encoding CheckpointEncoding
 backend/persistence field SaveCheckpointRequest.Fence backend.Fence
 backend/persistence field SaveCheckpointRequest.StateVector []byte
 backend/persistence field SaveCheckpointRequest.Update []byte
@@ -138,6 +143,7 @@ backend/persistence method Store.FenceMode () FenceMode
 backend/persistence type AppendRequest struct
 backend/persistence type Appender interface
 backend/persistence type Checkpoint struct
+backend/persistence type CheckpointEncoding uint8
 backend/persistence type CheckpointStore interface
 backend/persistence type CompactRequest struct
 backend/persistence type CompactingStore interface
@@ -157,10 +163,12 @@ backend/persistence type SaveCheckpointRequest struct
 backend/persistence type Store interface
 backend/persistence var ErrConflict
 backend/persistence var ErrCorrupt
+backend/persistence var ErrEncodingRequired
 backend/persistence var ErrFenceRequired
 backend/persistence var ErrNotFound
 backend/persistence var ErrStaleFence
 backend/persistence var ErrUnexpectedFence
+backend/persistence var ErrUnsupportedEncoding
 crdt const ActionAdd
 crdt const ActionDelete
 crdt const ActionUpdate

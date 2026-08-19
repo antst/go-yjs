@@ -154,7 +154,7 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 		ctx := context.Background()
 		update := checkpointState(t, "state")
 		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Update: update, StateVector: checkpointVector(t, update),
+			DocumentID: "doc", Encoding: persistence.EncodingV1, Update: update, StateVector: checkpointVector(t, update),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -174,7 +174,7 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 		}
 		update := checkpointState(t, "state")
 		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Update: update, StateVector: checkpointVector(t, update),
+			DocumentID: "doc", Encoding: persistence.EncodingV1, Update: update, StateVector: checkpointVector(t, update),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -191,7 +191,7 @@ func CheckpointPersistenceDeletion(t *testing.T, factory DeletingCheckpointStore
 		for _, id := range []backend.DocumentID{"alpha", "beta"} {
 			update := checkpointState(t, "state-"+string(id))
 			if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-				DocumentID: id, Update: update, StateVector: checkpointVector(t, update),
+				DocumentID: id, Encoding: persistence.EncodingV1, Update: update, StateVector: checkpointVector(t, update),
 			}); err != nil {
 				t.Fatal(err)
 			}
@@ -240,7 +240,7 @@ func CheckpointPersistenceDeletionFencing(t *testing.T, factory FencedDeletingCh
 		ctx := context.Background()
 		kept := checkpointState(t, "kept")
 		if _, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: "doc", Fence: 2, Update: kept, StateVector: checkpointVector(t, kept),
+			DocumentID: "doc", Fence: 2, Encoding: persistence.EncodingV1, Update: kept, StateVector: checkpointVector(t, kept),
 		}); err != nil {
 			t.Fatal(err)
 		}
@@ -278,7 +278,7 @@ func CheckpointPersistenceDeletionFencing(t *testing.T, factory FencedDeletingCh
 		state := checkpointState(t, "state")
 		save := func(fence backend.Fence) error {
 			_, err := store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-				DocumentID: "doc", Fence: fence, Update: state, StateVector: checkpointVector(t, state),
+				DocumentID: "doc", Fence: fence, Encoding: persistence.EncodingV1, Update: state, StateVector: checkpointVector(t, state),
 			})
 			return err
 		}

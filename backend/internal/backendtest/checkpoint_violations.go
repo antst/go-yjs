@@ -5,6 +5,7 @@ import (
 
 	"github.com/antst/go-yjs/backend"
 	"github.com/antst/go-yjs/backend/persistence"
+	"github.com/antst/go-yjs/crdt"
 )
 
 // CheckpointViolation names one way an implementation can breach the checkpoint
@@ -50,12 +51,24 @@ const (
 	// superseded owner write again the moment a document is deleted — which is
 	// precisely when a cascade is running and a stale node is still trying.
 	DeleteResetsFence CheckpointViolation = "delete-resets-fence"
+	// WrongCodecDerivation accepts both encodings and derives the state vector
+	// with the V1 decoder regardless. The V1 decoder on V2 bytes returns NO
+	// error and a vector describing zero clients, so this is the exact silent
+	// defect a real consumer shipped — and passed the previous suite with,
+	// because that suite only ever built V1 fixtures.
+	WrongCodecDerivation CheckpointViolation = "wrong-codec-derivation"
+	// AliasStateVectorOnSave copies the update but retains the caller's vector
+	// buffer. It is separated from AliasOnSave so each borrowed input has its
+	// own planted defect; aliasing both meant the vector property was only ever
+	// caught through the update.
+	AliasStateVectorOnSave CheckpointViolation = "alias-state-vector-on-save"
 )
 
 // AllCheckpointViolations is every planted breach, so the rejection test cannot
 // silently cover fewer than exist.
 var AllCheckpointViolations = []CheckpointViolation{
 	AliasOnSave, AliasOnLoad, FrozenRevision, SilentMissing, IgnoreCancellation, AcceptAnyFence,
+	WrongCodecDerivation, AliasStateVectorOnSave,
 }
 
 // AllDeletionViolations is every planted breach of the Deleter contract.
@@ -102,10 +115,29 @@ func (b *BrokenCheckpointStore) SaveCheckpoint(ctx context.Context, request pers
 	} else if b.revision == 0 {
 		b.revision = 1
 	}
-	stored := persistence.Checkpoint{Revision: b.revision}
-	if b.violation == AliasOnSave {
+	stored := persistence.Checkpoint{Revision: b.revision, Encoding: request.Encoding}
+	if b.violation == WrongCodecDerivation {
+		// Ignore what the caller supplied and derive with V1 whatever the codec.
+		stored.Update = append([]byte(nil), request.Update...)
+		if v, err := crdt.EncodeStateVectorFromUpdate(stored.Update); err == nil {
+			stored.StateVector = v
+		}
+		b.states[request.DocumentID] = stored
+		if request.Fence != 0 {
+			b.fences[request.DocumentID] = request.Fence
+		}
+		return b.revision, nil
+	}
+	switch b.violation {
+	case AliasStateVectorOnSave:
+		// Update copied, vector retained: each borrowed input needs its own
+		// planted defect, or the vector property is only ever caught through
+		// the update.
+		stored.Update = append([]byte(nil), request.Update...)
+		stored.StateVector = request.StateVector
+	case AliasOnSave:
 		stored.Update, stored.StateVector = request.Update, request.StateVector
-	} else {
+	default:
 		stored.Update = append([]byte(nil), request.Update...)
 		stored.StateVector = append([]byte(nil), request.StateVector...)
 	}
