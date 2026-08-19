@@ -6,6 +6,16 @@ import (
 	"testing"
 )
 
+// The guard survives the removal of the timing and bytes verdicts because what
+// it protects is unchanged: the anchor must stay fixed and the two arms must run
+// the same workload. Comparing allocation counts against a baseline a commit is
+// allowed to redefine detects nothing, and comparing them across different
+// fixtures compares different work.
+//
+// It also asserts the removed verdicts stay removed. Both were documented as
+// undecidable by the script's own measurement audit and still failed pushes, and
+// a reader who has not seen that audit will reasonably assume a timing canary
+// belongs in a pre-push hook.
 func TestMutationBenchmarkGuardKeepsFixedPreStructStoreAnchor(t *testing.T) {
 	const anchor = "c21917ae33751cd2f2e1010eda548a0525469d73"
 	script, err := os.ReadFile(repoPath(t, "bench/check-mutation-anchor.sh"))
@@ -34,6 +44,11 @@ func TestMutationBenchmarkGuardKeepsFixedPreStructStoreAnchor(t *testing.T) {
 	}
 	if strings.Contains(text, "HEAD~1") {
 		t.Fatal("mutation benchmark guard regressed to an immediate-parent baseline")
+	}
+	for _, removed := range []string{"max_time_ratio", "max_extra_bytes", "ratio="} {
+		if strings.Contains(text, removed) {
+			t.Errorf("the fixed-anchor script gates on %q again; the audit inside it shows that verdict is not decidable on a shared host, and it was removed rather than widened", removed)
+		}
 	}
 
 	hook, err := os.ReadFile(repoPath(t, ".githooks/pre-push"))

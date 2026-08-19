@@ -5,7 +5,7 @@
 #
 #   1. golangci-lint run   (uncapped — the default max-same-issues=3 hides dups)
 #   2. go build ./...       (CI: "build" step)
-#   3. fixed-anchor mutation canaries (catches cumulative drift across commits)
+#   3. fixed-anchor allocation canaries (catches cumulative allocation drift)
 #   4. ORACLE_REQUIRED=1 go test ./... -count=1   (oracle differentials + full suite)
 #   5. fuzz/run-gate.sh --tier fast --dir both    (every realized cell the registry declares)
 #
@@ -15,7 +15,6 @@
 #
 # Knobs:
 #   Y_CRDT_RACE=1   git push   # run the full suite WITH -race (mirrors CI exactly, ≈15 min)
-#   Y_CRDT_SKIP_CANARY=1 git push  # skip ONLY the timing tier (use on a loaded host)
 #   Y_CRDT_SKIP_TESTS=1 git push   # lint + build only (skip the test tier)
 #   git push --no-verify           # skip the hook entirely — prefer a narrower knob
 #
@@ -75,24 +74,22 @@ go build ./... || fail "go build"
 echo "▶ go vet -tags=structstoreoracle ./..."
 go vet -tags=structstoreoracle ./... || fail "go vet -tags=structstoreoracle"
 
-# 3. mutation canaries. Comparing against HEAD~1 let four individually small
-# slowdowns accumulate to 6-11%; the script owns a fixed pre-StructStore anchor
-# and alternates both arms so host drift cannot consistently favour either one.
-if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ] || [ "${Y_CRDT_SKIP_CANARY:-0}" = "1" ]; then
-	# The canaries are the only TIMING-sensitive step here, so they are the only
-	# one a busy host invalidates. Without a dedicated knob the escape hatch was
-	# `git push --no-verify`, which also drops lint, build, the oracle suite and
-	# the fuzz gate — none of which care about load. That happened three times in
-	# one day, each with a justification that applied only to the canaries.
-	#
-	# Skipping is legitimate when a full exact-SHA battery has just run, or when
-	# the host is loaded enough that a ratio is meaningless. It is not a shortcut:
-	# the anchor comparison is what catches drift that per-commit review misses,
-	# so a skipped canary means the NEXT push carries the comparison for both.
-	echo "⚠ skipping fixed-anchor mutation canaries (timing tier)" >&2
+# 3. allocation canaries. Comparing against HEAD~1 let four individually small
+# regressions accumulate; the script owns a fixed pre-StructStore anchor and
+# alternates both arms so host drift cannot consistently favour either one.
+#
+# THERE IS NO LONGER A DEDICATED SKIP KNOB. Y_CRDT_SKIP_CANARY existed because
+# this step used to gate on TIME, which a loaded host invalidates — so it needed
+# an escape hatch narrower than `git push --no-verify`, which drops lint, build,
+# the oracle suite and the fuzz gate as well. The timing verdict is gone and
+# allocation counts are deterministic, so load is no longer a reason to skip and
+# a knob whose only justification has been removed is ceremony. Y_CRDT_SKIP_TESTS
+# still covers it, alongside every other test step.
+if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ]; then
+	echo "⚠ skipping fixed-anchor allocation canaries" >&2
 else
-	echo "▶ fixed-anchor mutation canaries"
-	bash bench/check-mutation-anchor.sh || fail "fixed-anchor mutation canaries"
+	echo "▶ fixed-anchor allocation canaries"
+	bash bench/check-mutation-anchor.sh || fail "fixed-anchor allocation canaries"
 fi
 
 # 4. oracle fast tier + full suite

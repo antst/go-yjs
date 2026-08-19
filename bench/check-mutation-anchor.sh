@@ -1,20 +1,44 @@
 #!/usr/bin/env bash
-# Compare the three mutation canaries against the fixed pre-StructStore anchor.
+# Compare the three mutation canaries' ALLOCATION COUNTS against the fixed
+# pre-StructStore anchor.
 #
 # Immediate-parent comparisons missed four individually small regressions that
 # accumulated to 6-11%. This check deliberately keeps the original anchor: a
 # new commit does not get to redefine the baseline it is judged against.
+#
+# IT NO LONGER GATES ON TIME OR ON BYTES/OP. It used to, and the audit below —
+# written by the same gate — established that neither verdict is decidable on a
+# shared host: MapSet's fresh-process time spans 16.2%, three-round medians
+# change their verdict across adjacent windows, and the byte allowance sits
+# inside baseline-plus-jitter rather than outside it. The audit then changed no
+# threshold, so the gate went on failing pushes on numbers it documented as
+# undecidable, and the operating model became repeated --no-verify.
+#
+# The demonstration was direct: two consecutive runs of an identical commit
+# whose diff touched no crdt/ code at all reported MapSet at ratio 1.1118
+# (failing) and then 0.6900 (31% faster). A gate that contradicts itself by 61%
+# on the same input is not measuring the input.
+#
+# What remains is the one signal the audit's own controls showed to be exact:
+# allocation COUNTS were identical across Linux/amd64 and Darwin/arm64, under
+# both pinned and autoscaled iteration counts, while byte totals moved. That is
+# also the signal with a real failure behind it — this repository shipped a 43x
+# allocation regression — and it is deterministic, so this script now requires
+# all three rounds to agree rather than taking a median of disagreeing samples.
+# If they ever disagree, the check reports that instead of picking one.
+#
+# Timing belongs on the controlled benchmark box with a predeclared
+# distribution-derived band; see bench/status.py. It does not belong in a
+# pre-push hook on whatever laptop the author happens to have.
 
 set -euo pipefail
 
 readonly anchor_commit="c21917ae33751cd2f2e1010eda548a0525469d73"
 readonly benchmark_pattern='^(BenchmarkTextAppendLarge|BenchmarkArrayInsertSequential|BenchmarkMapSet)$'
-readonly max_time_ratio="${MUTATION_ANCHOR_MAX_RATIO:-1.05}"
-readonly max_extra_bytes="${MUTATION_ANCHOR_MAX_EXTRA_BYTES:-32}"
 
-# MEASUREMENT AUDIT (2026-08-17). Keep this next to the limits: it prevents a
-# noisy finding from being rediscovered and then "fixed" by changing the gate
-# around the value that happened to fail.
+# MEASUREMENT AUDIT (2026-08-17), retained because it is the evidence for the
+# removals above and prevents the timing verdict being reinstated by someone who
+# has not seen it.
 #
 # A Linux/amd64 run once put ArrayInsertSequential at about 1.08x against the
 # anchor. Fixed-count controls killed that finding: later windows measured
@@ -53,12 +77,12 @@ readonly max_extra_bytes="${MUTATION_ANCHOR_MAX_EXTRA_BYTES:-32}"
 # attributable to the newest change without an immediate-parent control.
 #
 # Finally, the observed median byte deltas were +24, +24 and +21 against the
-# +32 allowance, while individual arm spreads reached 16. The allowance is
-# inside combined baseline-plus-jitter, not outside it. It must eventually be
-# re-derived from these distributions with stated headroom. Do not widen it ad
-# hoc to pass a candidate, and do not claim fixed iterations solve it. This
-# audit deliberately changes no threshold or verdict while that redesign is
-# unresolved.
+# +32 allowance, while individual arm spreads reached 16. The allowance was
+# inside combined baseline-plus-jitter, not outside it. Both that verdict and
+# the timing verdict are now REMOVED rather than widened: an allowance derived
+# from noise cannot be re-derived into a decision, and the redesign this audit
+# deferred to has no owner. Do not reinstate either without a controlled host
+# and a band derived from its measured distribution.
 
 repo_root="$(git rev-parse --show-toplevel)"
 if ! git cat-file -e "${anchor_commit}^{commit}" 2>/dev/null; then
@@ -131,6 +155,10 @@ run_benchmarks() {
 	local results="$3"
 	local package="$4"
 	local raw="$scratch/${label}.$$.txt"
+	# benchtime is unchanged from when this measured time: allocation counts are
+	# per-operation and the audit above measured them exact under both pinned
+	# and autoscaled iteration counts, so shortening it would only trade away
+	# the evidence that the workload ran at a realistic size.
 
 	(
 		cd "$directory"
@@ -158,45 +186,39 @@ for round in 1 2 3; do
 	fi
 done
 
-median_for() {
+# unanimous_allocs returns the allocation count only when all three rounds agree.
+# A median would hide disagreement, and disagreement is the one thing that would
+# invalidate this check: the verdict is exact-equality, so a signal that varies
+# between rounds on one commit cannot decide anything between two.
+unanimous_allocs() {
 	local file="$1"
 	local benchmark="$2"
-	local column="$3"
-	local count
+	local values count distinct
 
-	count="$(awk -v benchmark="$benchmark" '$1 == benchmark { count++ } END { print count + 0 }' "$file")"
+	values="$(awk -v benchmark="$benchmark" '$1 == benchmark { print $4 }' "$file")"
+	count="$(printf '%s\n' "$values" | grep -c .)"
 	if [ "$count" != "3" ]; then
 		echo "${benchmark}: got ${count} samples, want 3" >&2
 		exit 1
 	fi
-	awk -v benchmark="$benchmark" -v column="$column" '$1 == benchmark { print $column }' "$file" |
-		sort -n | sed -n '2p'
+	distinct="$(printf '%s\n' "$values" | sort -u | grep -c .)"
+	if [ "$distinct" != "1" ]; then
+		printf '%s: allocation count varied across rounds (%s); it is not deterministic on this host, so it cannot gate\n' \
+			"$benchmark" "$(printf '%s' "$values" | tr '\n' ' ')" >&2
+		exit 1
+	fi
+	printf '%s\n' "$values" | head -1
 }
 
 failed=0
 for benchmark in BenchmarkTextAppendLarge BenchmarkArrayInsertSequential BenchmarkMapSet; do
-	anchor_ns="$(median_for "$anchor_results" "$benchmark" 2)"
-	current_ns="$(median_for "$current_results" "$benchmark" 2)"
-	anchor_bytes="$(median_for "$anchor_results" "$benchmark" 3)"
-	current_bytes="$(median_for "$current_results" "$benchmark" 3)"
-	anchor_allocs="$(median_for "$anchor_results" "$benchmark" 4)"
-	current_allocs="$(median_for "$current_results" "$benchmark" 4)"
-	ratio="$(awk -v current="$current_ns" -v anchor="$anchor_ns" 'BEGIN { printf "%.4f", current / anchor }')"
+	anchor_allocs="$(unanimous_allocs "$anchor_results" "$benchmark")"
+	current_allocs="$(unanimous_allocs "$current_results" "$benchmark")"
 
-	printf '%-31s anchor=%9s ns current=%9s ns ratio=%s bytes=%s->%s allocs=%s->%s\n' \
-		"$benchmark" "$anchor_ns" "$current_ns" "$ratio" \
-		"$anchor_bytes" "$current_bytes" "$anchor_allocs" "$current_allocs"
+	printf '%-31s allocs=%s->%s\n' "$benchmark" "$anchor_allocs" "$current_allocs"
 
-	if awk -v ratio="$ratio" -v limit="$max_time_ratio" 'BEGIN { exit !(ratio > limit) }'; then
-		echo "  regression: ratio ${ratio} exceeds fixed-anchor limit ${max_time_ratio}" >&2
-		failed=1
-	fi
 	if [ "$current_allocs" != "$anchor_allocs" ]; then
-		echo "  regression: allocation count changed" >&2
-		failed=1
-	fi
-	if [ "$current_bytes" -gt $((anchor_bytes + max_extra_bytes)) ]; then
-		echo "  regression: bytes exceed anchor allowance of ${max_extra_bytes}" >&2
+		echo "  regression: allocations/op changed from ${anchor_allocs} to ${current_allocs}" >&2
 		failed=1
 	fi
 done
