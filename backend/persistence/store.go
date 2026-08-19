@@ -216,6 +216,18 @@ type CompactingStore interface {
 // the V1 decoder, and passed the conformance suite — because the suite's own
 // fixtures were V1, which made the wrong decoder correct for the only bytes it
 // ever saw.
+//
+// VERIFYING A DECLARATION YOU DID NOT MAKE. A store often holds bytes it did
+// not encode: another system writes the document on create, or a migration
+// backfills it. Declaring an encoding for those bytes is a claim about that
+// other system, so it is worth checking rather than trusting. Measured, both
+// directions and every size: the WRONG decoder returns no error and an EMPTY
+// state vector — never a plausible-but-wrong one. So a store can verify a
+// declaration by decoding with it and, if the vector comes back empty, decoding
+// with the other codec; a non-empty result from the other proves the
+// declaration wrong. Empty from both means the document is genuinely empty,
+// which is unambiguous. That turns a cross-system assumption into a check that
+// fails loudly at the boundary instead of producing a zero-client vector.
 type CheckpointEncoding uint8
 
 const (
