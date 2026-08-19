@@ -199,7 +199,11 @@ func cloneRecords(records []persistence.Record) []persistence.Record {
 
 func cloneCheckpoint(checkpoint persistence.Checkpoint) persistence.Checkpoint {
 	return persistence.Checkpoint{
-		Revision:    checkpoint.Revision,
+		Revision: checkpoint.Revision,
+		// Carrying Encoding is not optional: dropping it here would zero the
+		// codec on every load, which is the same silent-wrong-answer defect the
+		// field exists to remove.
+		Encoding:    checkpoint.Encoding,
 		Update:      append([]byte(nil), checkpoint.Update...),
 		StateVector: append([]byte(nil), checkpoint.StateVector...),
 	}

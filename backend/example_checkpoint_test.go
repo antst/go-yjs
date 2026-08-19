@@ -44,6 +44,17 @@ func (s *exampleBlobStore) SaveCheckpoint(ctx context.Context, request persisten
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
+	// This medium stores one bare blob and nothing else, so it cannot record
+	// which codec produced it — which means it must FIX the codec and reject
+	// the other. Guessing from the bytes is what produced a zero-client state
+	// vector from a V2 update while reporting no error at all.
+	switch request.Encoding {
+	case persistence.EncodingV2:
+	case persistence.EncodingUnspecified:
+		return 0, persistence.ErrEncodingRequired
+	default:
+		return 0, persistence.ErrUnsupportedEncoding
+	}
 	if request.Fence != 0 {
 		return 0, persistence.ErrUnexpectedFence
 	}
@@ -67,13 +78,15 @@ func (s *exampleBlobStore) LoadCheckpoint(ctx context.Context, id backend.Docume
 	if !ok {
 		return persistence.Checkpoint{}, persistence.ErrNotFound
 	}
-	// Derived rather than stored: this medium has nowhere to put it.
-	vector, err := crdt.EncodeStateVectorFromUpdate(blob)
+	// Derived rather than stored: this medium has nowhere to put it. The codec
+	// is not guessed — the store accepts only V2, so V2 is what it decodes.
+	vector, err := crdt.EncodeStateVectorFromUpdateV2(blob)
 	if err != nil {
 		return persistence.Checkpoint{}, fmt.Errorf("%w: %s", persistence.ErrCorrupt, err)
 	}
 	return persistence.Checkpoint{
 		Revision:    s.revisions[id],
+		Encoding:    persistence.EncodingV2,
 		Update:      append([]byte(nil), blob...),
 		StateVector: vector,
 	}, nil
@@ -107,10 +120,13 @@ func Example_checkpointBackend() {
 		// caller's monotonicity obligation: it always covers everything saved
 		// before. A checkpoint store replaces rather than merges, so handing it
 		// a partial state would silently discard the difference.
-		update, err := crdt.EncodeStateAsUpdate(live, nil)
+		update, err := crdt.EncodeStateAsUpdateV2(live, nil)
+		mustExample(err)
+		vector, err := crdt.EncodeStateVectorFromUpdateV2(update)
 		mustExample(err)
 		_, err = store.SaveCheckpoint(ctx, persistence.SaveCheckpointRequest{
-			DocumentID: document, Update: update,
+			DocumentID: document, Encoding: persistence.EncodingV2,
+			Update: update, StateVector: vector,
 		})
 		mustExample(err)
 	}
@@ -156,7 +172,7 @@ func loadCheckpointDocument(ctx context.Context, store persistence.CheckpointSto
 		doc.Destroy()
 		return nil, err
 	}
-	if err := crdt.ApplyUpdate(doc, checkpoint.Update, nil); err != nil {
+	if err := crdt.ApplyUpdateV2(doc, checkpoint.Update, nil); err != nil {
 		doc.Destroy()
 		return nil, err
 	}

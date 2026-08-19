@@ -45,6 +45,9 @@ func (s *CheckpointStore) SaveCheckpoint(ctx context.Context, request persistenc
 	}
 	s.mutex.Lock()
 	defer s.mutex.Unlock()
+	if err := acceptCheckpointEncoding(request.Encoding); err != nil {
+		return 0, err
+	}
 	if err := acceptCheckpointFence(s.mode, s.fences, request.DocumentID, request.Fence); err != nil {
 		return 0, err
 	}
@@ -52,6 +55,7 @@ func (s *CheckpointStore) SaveCheckpoint(ctx context.Context, request persistenc
 	// Copy on the way in: the request's slices are borrowed only for this call.
 	s.states[request.DocumentID] = persistence.Checkpoint{
 		Revision:    s.revision,
+		Encoding:    request.Encoding,
 		Update:      append([]byte(nil), request.Update...),
 		StateVector: append([]byte(nil), request.StateVector...),
 	}
@@ -106,4 +110,18 @@ func (s *CheckpointStore) Delete(ctx context.Context, request persistence.Delete
 	}
 	delete(s.states, request.DocumentID)
 	return nil
+}
+
+// acceptCheckpointEncoding enforces that the codec is stated. This reference
+// stores what it is given rather than deriving, so it supports both codecs; a
+// store that supports only one returns ErrUnsupportedEncoding for the other.
+func acceptCheckpointEncoding(encoding persistence.CheckpointEncoding) error {
+	switch encoding {
+	case persistence.EncodingV1, persistence.EncodingV2:
+		return nil
+	case persistence.EncodingUnspecified:
+		return persistence.ErrEncodingRequired
+	default:
+		return persistence.ErrUnsupportedEncoding
+	}
 }

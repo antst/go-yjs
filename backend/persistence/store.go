@@ -55,6 +55,14 @@ var (
 	// ErrFenceRequired reports a missing fence on a store configured for
 	// clustered writes.
 	ErrFenceRequired = errors.New("persistence: fence required")
+	// ErrEncodingRequired reports a checkpoint save that did not state which
+	// codec produced its update. There is no default: defaulting is how a
+	// V2 caller silently got a V1 reader.
+	ErrEncodingRequired = errors.New("persistence: checkpoint encoding required")
+	// ErrUnsupportedEncoding reports a checkpoint whose codec this store cannot
+	// handle. A store that supports one codec must reject the other loudly
+	// rather than decode it as if it were its own.
+	ErrUnsupportedEncoding = errors.New("persistence: unsupported checkpoint encoding")
 	// ErrUnexpectedFence reports a clustered write sent to a store configured
 	// for the unclustered mode.
 	ErrUnexpectedFence = errors.New("persistence: unexpected fence")
@@ -96,7 +104,10 @@ type Record struct {
 //
 // Both byte slices returned by Load are caller-owned.
 type Checkpoint struct {
-	Revision    Revision
+	Revision Revision
+	// Encoding is the codec of Update, as supplied when it was saved. A reader
+	// needs it for the same reason the store did: the bytes do not say.
+	Encoding    CheckpointEncoding
 	Update      []byte
 	StateVector []byte
 }
@@ -192,6 +203,34 @@ type CompactingStore interface {
 	Compactor
 }
 
+// CheckpointEncoding names the Yjs codec that produced a checkpoint's update.
+//
+// IT EXISTS BECAUSE GUESSING IS SILENT. The V1 state-vector decoder applied to
+// V2 update bytes does not fail — it returns no error and a vector describing
+// ZERO clients. A store that derives the vector rather than storing it cannot
+// tell the codecs apart from the bytes, so without this field it must guess,
+// and the wrong guess produces a confident wrong answer rather than a
+// diagnosable one.
+//
+// This was not hypothetical. A consumer stored bare V2 snapshots, derived with
+// the V1 decoder, and passed the conformance suite — because the suite's own
+// fixtures were V1, which made the wrong decoder correct for the only bytes it
+// ever saw.
+type CheckpointEncoding uint8
+
+const (
+	// EncodingUnspecified is the zero value and is never valid. A save carrying
+	// it is rejected with ErrEncodingRequired. Making the zero value mean V1
+	// would recreate the original defect for every caller who forgot the field.
+	EncodingUnspecified CheckpointEncoding = iota
+	// EncodingV1 marks an update from EncodeStateAsUpdate, whose vector is
+	// derived with EncodeStateVectorFromUpdate.
+	EncodingV1
+	// EncodingV2 marks an update from EncodeStateAsUpdateV2, whose vector is
+	// derived with EncodeStateVectorFromUpdateV2.
+	EncodingV2
+)
+
 // SaveCheckpointRequest installs the complete durable state of one document.
 //
 // Update must cover EVERYTHING the caller has previously saved for this
@@ -219,8 +258,12 @@ type CompactingStore interface {
 // that retains or asynchronously writes either must copy first. Fence zero is
 // the ordinary non-clustered mode.
 type SaveCheckpointRequest struct {
-	DocumentID  backend.DocumentID
-	Fence       backend.Fence
+	DocumentID backend.DocumentID
+	Fence      backend.Fence
+	// Encoding states which codec produced Update. Required; there is no
+	// default. A store that supports only one codec returns
+	// ErrUnsupportedEncoding for the other rather than decoding it anyway.
+	Encoding    CheckpointEncoding
 	Update      []byte
 	StateVector []byte
 }
@@ -255,12 +298,19 @@ type CheckpointStore interface {
 	// SaveCheckpoint returning nil means the state crossed the implementation's
 	// durability boundary. Revisions are strictly increasing per document.
 	//
+	// It MUST reject EncodingUnspecified with ErrEncodingRequired, and a codec
+	// it does not support with ErrUnsupportedEncoding. Neither may be treated
+	// as a default: a store that decodes unknown bytes with its preferred codec
+	// produces a confident wrong answer, which is the defect this field exists
+	// to remove.
+	//
 	// Errors: ErrStaleFence when a superseded owner writes, ErrFenceRequired
 	// when a fenced store receives fence zero, ErrUnexpectedFence when an
 	// unfenced store receives a non-zero fence.
 	SaveCheckpoint(context.Context, SaveCheckpointRequest) (Revision, error)
 	// LoadCheckpoint returns the current state, or ErrNotFound when the
-	// document has never been saved. Both slices in the result are owned by the
+	// document has never been saved. The returned Encoding must be the one the
+	// state was saved with. Both slices in the result are owned by the
 	// caller: mutating them must not change durable state or another reader's
 	// result.
 	LoadCheckpoint(context.Context, backend.DocumentID) (Checkpoint, error)
