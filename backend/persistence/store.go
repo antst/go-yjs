@@ -34,10 +34,9 @@ var (
 	// It must not be used for state the store knows about but cannot produce.
 	// A store that resolves a document through a pointer, finds the pointer set
 	// and the target gone, has not found "no history": reporting ErrNotFound
-	// there makes the caller treat a document that HAD content as new, seed it
-	// with create-time content, and overwrite the last good state on the next
-	// save. That is silent data loss arriving through the error type. Use
-	// ErrCorrupt.
+	// there makes the caller initialise a new document over previously durable
+	// state, and a later save then permanently replaces what was recoverable.
+	// Use ErrCorrupt.
 	ErrNotFound = errors.New("persistence: document not found")
 	// ErrConflict reports that a checkpoint basis is no longer admissible.
 	ErrConflict = errors.New("persistence: revision conflict")
@@ -427,9 +426,8 @@ type Deleter interface {
 	// ErrNotFound's own: a store holding the content while another system holds
 	// the pointer to it leaves, after a successful delete, a pointer whose
 	// target is gone — and ErrNotFound explicitly forbids reporting that as
-	// ErrNotFound, because a caller then treats a document that HAD content as
-	// new and seeds it with create-time content. Deleting a document and having
-	// it return as its original content is worse than any load error.
+	// ErrNotFound, because a caller then initialises a new document over state
+	// that still exists, and a later save permanently replaces it.
 	//
 	// ErrCorrupt is correct in that window, and this clause does not override
 	// that. What it means is that a partial owner cannot satisfy Deleter alone:

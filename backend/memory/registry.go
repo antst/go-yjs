@@ -81,9 +81,6 @@ type InProcessRegistry struct {
 }
 
 type entry struct {
-	// id is carried so a generation that has been detached from entries can
-	// still be found by document ID while it drains.
-	id          backend.DocumentID
 	ready       chan struct{}
 	invalidated chan struct{}
 	done        chan struct{}
@@ -218,7 +215,6 @@ func (r *InProcessRegistry) Acquire(ctx context.Context, id backend.DocumentID, 
 		}
 
 		created := &entry{
-			id:    id,
 			ready: make(chan struct{}), invalidated: make(chan struct{}), done: make(chan struct{}),
 		}
 		// WithoutCancel, not Background: the generation must not inherit this
@@ -406,11 +402,11 @@ func (r *InProcessRegistry) runOpen(id backend.DocumentID, created *entry, open 
 // releasing handle still completes destruction, so recovery cannot silently
 // revert to serving the stale document.
 //
-// It also waits for an ABANDONED initialization of the same document — one
-// whose last waiter left while its open was still running. Such a generation is
-// unreachable and its result will be destroyed, but the open itself may still be
-// reading persistence, and a caller sequencing a durable delete needs that to
-// have stopped.
+// It does NOT wait for an abandoned initialization of the same document. Such a
+// generation is already detached, cancelled, and destroyed on completion, so it
+// can never publish to anyone; only its READ may still be in flight, and no
+// caller's result depends on that having stopped. Close still refuses while any
+// registry-owned goroutine remains.
 //
 // INVALIDATE IS NOT ENOUGH TO ERASE A DOCUMENT. It drains the CURRENT instance;
 // a later Acquire opens a fresh one from persistence. So invalidating and then
@@ -432,23 +428,17 @@ func (r *InProcessRegistry) Invalidate(ctx context.Context, id backend.DocumentI
 		r.mu.Unlock()
 		return ErrClosed
 	}
-	// Abandoned generations are detached from entries but their opens may still
-	// be running, so they have to be collected before anything else changes.
-	// Callers use Invalidate to establish that nothing is loading this document
-	// before they delete it durably, and "nothing" has to include a load that no
-	// caller is waiting for any more.
-	orphans := r.drainingForLocked(id)
 	current := r.entries[id]
 	if current == nil {
 		r.mu.Unlock()
-		return waitAll(ctx, orphans)
+		return nil
 	}
 	// Evict has already made this idle generation unavailable to Acquire and
 	// owns its destruction. Treat that as successful invalidation rather than
 	// racing a second Destroy call against it.
 	if current.closing {
 		r.mu.Unlock()
-		return waitAll(ctx, orphans)
+		return nil
 	}
 	current.closing = true
 	current.poisoned = true
@@ -469,33 +459,10 @@ func (r *InProcessRegistry) Invalidate(ctx context.Context, id backend.DocumentI
 	}
 	select {
 	case <-done:
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
-	return waitAll(ctx, orphans)
-}
-
-// drainingForLocked returns the completion channels of generations for id that
-// are draining but no longer reachable through entries.
-func (r *InProcessRegistry) drainingForLocked(id backend.DocumentID) []chan struct{} {
-	var done []chan struct{}
-	for e := range r.draining {
-		if e.id == id {
-			done = append(done, e.done)
-		}
-	}
-	return done
-}
-
-func waitAll(ctx context.Context, done []chan struct{}) error {
-	for _, c := range done {
-		select {
-		case <-c:
-		case <-ctx.Done():
-			return ctx.Err()
-		}
-	}
-	return nil
 }
 
 func (r *InProcessRegistry) takePoisonedDestroyLocked(current *entry) (*crdt.Doc, bool) {
