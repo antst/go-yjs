@@ -118,32 +118,6 @@ func acceptedFixtures(t *testing.T, newStore func() persistence.CheckpointStore,
 	return accepted
 }
 
-func checkpointState(t *testing.T, text string) []byte {
-	t.Helper()
-	// The ClientID is pinned so the same text always encodes to the same bytes:
-	// a random one would make a fixture built for the assertion differ from the
-	// one that was saved, and the byte-fidelity checks would fail on identical
-	// content.
-	doc := crdt.NewDoc("conformance", crdt.WithGC(false), crdt.WithClientID(1))
-	defer doc.Destroy()
-	doc.GetText("body").Insert(0, text, crdt.Object{})
-	update, err := crdt.EncodeStateAsUpdate(doc, nil)
-	if err != nil {
-		t.Fatalf("building a checkpoint fixture: %v", err)
-	}
-	return update
-}
-
-// checkpointVector is the matching state vector for a fixture.
-func checkpointVector(t *testing.T, update []byte) []byte {
-	t.Helper()
-	vector, err := crdt.EncodeStateVectorFromUpdate(update)
-	if err != nil {
-		t.Fatalf("building a state-vector fixture: %v", err)
-	}
-	return vector
-}
-
 // CheckpointStoreFactory returns a fresh, empty unfenced CheckpointStore.
 type CheckpointStoreFactory func() persistence.CheckpointStore
 
@@ -350,6 +324,7 @@ func CheckpointPersistence(t *testing.T, factory CheckpointStoreFactory) {
 			t.Fatal("LoadCheckpoint on a cancelled context returned nil")
 		}
 	})
+	checkpointPersistenceConcurrency(t, factory)
 }
 
 // CheckpointPersistenceFencing checks the clustered profile. Run it only
@@ -410,4 +385,5 @@ func CheckpointPersistenceFencing(t *testing.T, factory FencedCheckpointStoreFac
 			t.Fatalf("LoadCheckpoint on a fenced store = %v, want success", err)
 		}
 	})
+	checkpointPersistenceFencingConcurrency(t, factory)
 }

@@ -179,6 +179,15 @@ type Loader interface {
 // Store is the minimum persistence implementation a backend must provide. Its
 // FenceMode is fixed when the implementation is constructed.
 //
+// SAFE FOR CONCURRENT USE, and this has to be said rather than inferred: a Go
+// type is not goroutine-safe unless its documentation says so, and a server
+// serves many documents and many sessions at once. Every method may be called
+// concurrently, on the same document and on different ones. The per-document
+// decisions are atomic — assigning a revision, admitting or rejecting a fence,
+// and installing a checkpoint each happen indivisibly, so no caller observes a
+// half-applied one. Without this sentence the concurrent clauses below constrain
+// outcomes that a single-threaded reading would never have to produce.
+//
 // Fence mode governs mutation authority, not the durable history format. A
 // Fenced store must be able to read history previously written through an
 // Unfenced store over the same data, and its first fenced mutation establishes
@@ -194,6 +203,13 @@ type Compactor interface {
 	// Compact is compare-and-swap against Basis. It must preserve concurrent
 	// appends after Basis and return ErrConflict when the basis cannot safely be
 	// installed.
+	//
+	// "Concurrent" is literal: appends may be in flight when Compact is called
+	// and may commit while it runs. On success the installed checkpoint covers
+	// exactly Basis, and every append acknowledged past Basis — whenever it
+	// committed — is still recoverable from the tail. Advancing the checkpoint's
+	// revision beyond Basis to account for appends it did not fold in is not a
+	// permitted way to satisfy that.
 	Compact(context.Context, CompactRequest) error
 }
 
@@ -216,6 +232,17 @@ type CompactingStore interface {
 // the V1 decoder, and passed the conformance suite — because the suite's own
 // fixtures were V1, which made the wrong decoder correct for the only bytes it
 // ever saw.
+//
+// GUESSING ALSO MANUFACTURES CAPABILITY, which is the harder failure to notice.
+// A sniffing store does not merely risk a wrong answer; it advertises handling a
+// codec the rest of the stack cannot handle. The same consumer had a passing
+// test asserting its store accepted V1 updates, while the layer above had
+// written and read V2 exclusively since its first commit and would have refused
+// those bytes outright. The test was true at the store boundary and false of the
+// system, and the sniffing was what made it true. A declared encoding removes a
+// lie rather than only a guess: a store that cannot record the codec says so
+// with ErrUnsupportedEncoding, and the capability it advertises is then the one
+// it has.
 //
 // VERIFYING A DECLARATION YOU DID NOT MAKE. A store often holds bytes it did
 // not encode: another system writes the document on create, or a migration
@@ -306,6 +333,12 @@ type SaveCheckpointRequest struct {
 // The methods are name-qualified rather than Save/Load so that one type can
 // offer both profiles; Loader.Load already takes a different signature, and Go
 // would otherwise make the two mutually exclusive.
+// SAFE FOR CONCURRENT USE, on the same terms as Store: every method may be
+// called concurrently, and replacing the stored state is atomic. A checkpoint is
+// ONE value — a load never returns one save's update beside another save's state
+// vector. A store that writes the two halves in separate critical sections
+// violates this, and nothing downstream rejects the result: it decodes, and it
+// is wrong.
 type CheckpointStore interface {
 	// SaveCheckpoint returning nil means the state crossed the implementation's
 	// durability boundary. Revisions are strictly increasing per document.
@@ -388,6 +421,23 @@ type Deleter interface {
 	// IDEMPOTENT. Deleting a document with no durable state succeeds and
 	// returns nil. It must not report ErrNotFound: a cascade retries, and the
 	// second attempt must not fail the operation it is completing.
+	//
+	// THE ErrNotFound CLAUSE ASSUMES THIS STORE OWNS EVERYTHING THAT MAKES THE
+	// DOCUMENT FINDABLE. Where it does not, the two rules above collide with
+	// ErrNotFound's own: a store holding the content while another system holds
+	// the pointer to it leaves, after a successful delete, a pointer whose
+	// target is gone — and ErrNotFound explicitly forbids reporting that as
+	// ErrNotFound, because a caller then treats a document that HAD content as
+	// new and seeds it with create-time content. Deleting a document and having
+	// it return as its original content is worse than any load error.
+	//
+	// ErrCorrupt is correct in that window, and this clause does not override
+	// that. What it means is that a partial owner cannot satisfy Deleter alone:
+	// the load-after-delete guarantee belongs to whatever owns the whole
+	// document — the cascade that removes the content AND the pointer — and that
+	// is what should implement Deleter and be run against the deletion suite.
+	// A component store failing the suite on this rule has a shape mismatch, not
+	// a bug; a store that owns the whole document and fails it has a bug.
 	//
 	// Errors: ErrStaleFence when a superseded owner deletes, ErrFenceRequired
 	// when a fenced store receives fence zero, ErrUnexpectedFence when an
