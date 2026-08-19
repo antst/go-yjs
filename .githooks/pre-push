@@ -5,7 +5,6 @@
 #
 #   1. golangci-lint run   (uncapped — the default max-same-issues=3 hides dups)
 #   2. go build ./...       (CI: "build" step)
-#   3. fixed-anchor allocation canaries (catches cumulative allocation drift)
 #   4. ORACLE_REQUIRED=1 go test ./... -count=1   (oracle differentials + full suite)
 #   5. fuzz/run-gate.sh --tier fast --dir both    (every realized cell the registry declares)
 #
@@ -74,23 +73,6 @@ go build ./... || fail "go build"
 echo "▶ go vet -tags=structstoreoracle ./..."
 go vet -tags=structstoreoracle ./... || fail "go vet -tags=structstoreoracle"
 
-# 3. allocation canaries. Comparing against HEAD~1 let four individually small
-# regressions accumulate; the script owns a fixed pre-StructStore anchor and
-# alternates both arms so host drift cannot consistently favour either one.
-#
-# THERE IS NO LONGER A DEDICATED SKIP KNOB. Y_CRDT_SKIP_CANARY existed because
-# this step used to gate on TIME, which a loaded host invalidates — so it needed
-# an escape hatch narrower than `git push --no-verify`, which drops lint, build,
-# the oracle suite and the fuzz gate as well. The timing verdict is gone and
-# allocation counts are deterministic, so load is no longer a reason to skip and
-# a knob whose only justification has been removed is ceremony. Y_CRDT_SKIP_TESTS
-# still covers it, alongside every other test step.
-if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ]; then
-	echo "⚠ skipping fixed-anchor allocation canaries" >&2
-else
-	echo "▶ fixed-anchor allocation canaries"
-	bash bench/check-mutation-anchor.sh || fail "fixed-anchor allocation canaries"
-fi
 
 # 4. oracle fast tier + full suite
 if [ "${Y_CRDT_SKIP_TESTS:-0}" = "1" ]; then

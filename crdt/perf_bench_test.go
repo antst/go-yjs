@@ -68,14 +68,21 @@ func perfSinkDoc() *Doc {
 
 // ---------------------------------------------------------------- text: sequential append
 
+// workloadTextAppend is shared with the allocation anchor test so the number
+// that test pins is the number this benchmark measures. Two copies of a
+// workload would let the anchor certify code the benchmark no longer runs.
+func workloadTextAppend(n int) {
+	doc := perfDoc()
+	txt := doc.GetText("t")
+	for j := 0; j < n; j++ {
+		txt.Insert(txt.Length(), "x", Object{})
+	}
+}
+
 func benchAppend(b *testing.B, n int) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		doc := perfDoc()
-		txt := doc.GetText("t")
-		for j := 0; j < n; j++ {
-			txt.Insert(txt.Length(), "x", Object{})
-		}
+		workloadTextAppend(n)
 	}
 }
 
@@ -170,14 +177,18 @@ func BenchmarkTextToDelta(b *testing.B) {
 
 // ---------------------------------------------------------------- array / map at size
 
+func workloadArrayInsertSequential() {
+	doc := perfDoc()
+	arr := doc.GetArray("a")
+	for j := 0; j < perfSmall; j++ {
+		arr.Insert(arr.GetLength(), ArrayAny{j})
+	}
+}
+
 func BenchmarkArrayInsertSequential(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		doc := perfDoc()
-		arr := doc.GetArray("a")
-		for j := 0; j < perfSmall; j++ {
-			arr.Insert(arr.GetLength(), ArrayAny{j})
-		}
+		workloadArrayInsertSequential()
 	}
 }
 
@@ -193,14 +204,18 @@ var perfKeys = func() []string {
 	return k
 }()
 
+func workloadMapSet() {
+	doc := perfDoc()
+	m := doc.GetMap("m")
+	for j := 0; j < perfSmall; j++ {
+		m.Set(perfKeys[j], j)
+	}
+}
+
 func BenchmarkMapSet(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		doc := perfDoc()
-		m := doc.GetMap("m")
-		for j := 0; j < perfSmall; j++ {
-			m.Set(perfKeys[j], j)
-		}
+		workloadMapSet()
 	}
 }
 
