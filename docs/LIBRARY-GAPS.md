@@ -1,12 +1,15 @@
-# Library gaps — deferred until performance work lands
+# Library gaps
 
 Written 2026-08-14, after benchmarking and source-comparing against
 [`reearth/ygo`](https://github.com/reearth/ygo) (MIT), the other production Go Yjs implementation.
 
-This is a **deferred work list**, not a plan. Nothing here is a correctness gap: the differential
-oracle is green across 21 (surface, direction) cells and all 95 reference API exports have a Go
-counterpart. These are the things that make a library pleasant and safe to *depend on*, and they
-are being consciously postponed until the mutation-path performance work is done.
+Reviewed 2026-08-21. This is a **work list**, not a plan. Nothing here is a correctness gap: the
+differential oracle is green across 21 (surface, direction) cells and all 95 reference API exports
+have a Go counterpart. These are the things that make a library pleasant and safe to *depend on*.
+
+The original framing — "deferred until the mutation-path performance work lands" — no longer
+applies: that work has landed. Items 1-6 below are open. Item 8 is done and kept only as the
+record of a closed decision.
 
 ## Scope note: what is deliberately NOT on this list
 
@@ -20,7 +23,7 @@ That is not a neutral difference. Their layering has a measurable cost for a lib
 | | direct runtime dependencies |
 |---|---|
 | ygo | `modernc.org/sqlite`, `redis/go-redis`, `gorilla/websocket`, `miniredis`, `testify`, `x/sync`, `x/time` — **7** |
-| this library | `mitchellh/copystructure` — **1** |
+| this library | none — `go.sum` is empty |
 
 Importing their `crdt` package pulls a module graph containing a transpiled SQLite and a Redis
 client. Module-graph pruning keeps them from linking, but they still land in `go.sum` and therefore
@@ -92,22 +95,19 @@ it stops being fine the moment anything depends on this.
 
 ## 7. Code organisation
 
-**63 files / ~16,900 lines** for this library's core against ygo's **29 files / ~13,150 lines** for
-strictly more functionality. Some of that is Constitution II mandating a single package, but not
-most of it — the file count is the tell.
+**84 non-test Go files** across `crdt`, `protocol`, `backend` and `internal`, against ygo's **29
+files / ~13,150 lines** for a different functional split. Some of that is Constitution II mandating
+a single CRDT package, but not most of it — the file count is the tell. The count has grown since
+this was written, largely from the backend ports and their conformance suites, which did not exist
+in the original comparison and which ygo does not have an equivalent of.
 
-Deferred deliberately: refactoring while the oracle is green is safe and cheap, but doing it *now*
-would churn every file the performance work is touching. The right order is performance first, then
-reorganise with the oracle holding the line.
+The performance work this was waiting on has landed, so the stated ordering constraint is gone.
 
-## 8. Drop the last dependency
+## 8. Drop the last dependency — DONE
 
-`mitchellh/copystructure` (+ `mitchellh/reflectwalk`) is the only runtime dependency, and
-Constitution III asks for zero. It is reflection-based deep copy, which is also a performance
-liability wherever it sits in a hot path.
-
-**Wanted:** replace with explicit copy code for the handful of types that need it. Two wins at once
-— genuine zero-dependency, and reflection out of the hot paths.
+`mitchellh/copystructure` was the only runtime dependency. It has been replaced with explicit copy
+code, so the module now has zero runtime dependencies and an empty `go.sum`, and reflection is out
+of the copy paths.
 
 ---
 
