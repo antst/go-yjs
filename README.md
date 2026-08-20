@@ -8,7 +8,7 @@ It exists so that a Go service can speak Yjs to browsers. You pull the module, i
 go get github.com/antst/go-yjs
 ```
 
-Requires Go 1.24+. No runtime dependencies.
+Requires Go 1.26+. Zero runtime dependencies — `go.sum` is empty.
 
 ## Layout
 
@@ -17,7 +17,7 @@ Requires Go 1.24+. No runtime dependencies.
 | `crdt` | Documents, shared types, update encoding, transactions, snapshots, undo |
 | `protocol` | Sync and awareness message framing |
 | `backend` | Neutral identifiers shared by the ports — no CRDT values, no wire frames |
-| `backend/persistence` | **Port you implement**: SQL, files, object store, your choice |
+| `backend/persistence` | **Port you implement**: SQL, files, object store, your choice — two profiles |
 | `backend/memory` | Document registry — working in-process default, replaceable |
 | `backend/hub` | Fan-out — working in-process default, replaceable |
 | `backend/cluster` | **Optional.** Multi-node document ownership, typically Redis |
@@ -59,7 +59,11 @@ Available types: `Y.Doc`, `Y.Text`, `Y.Array`, `Y.Map`, `Y.XmlFragment`, `Y.XmlE
 A single process serving Yjs needs a transport adapter and somewhere to put bytes. Everything else has a working default.
 
 - **Transport adapter — yours.** WebSocket, SSE, gRPC, whatever your service already speaks. It is deliberately not in this module: transport belongs to your service, and a CRDT library that owns your connection lifecycle is one you have to fight.
-- **Persistence — yours.** Implement `persistence.Store`. Appending updates and loading them back is the whole job; compaction is optional and additive.
+- **Persistence — yours.** Pick the profile that matches your medium:
+  - **`persistence.Store`** — an append log. You append update bytes and load them back; `Compact` is optional and additive. Natural over SQL or any medium that can cheaply hold a growing history.
+  - **`persistence.CheckpointStore`** — one rewritable blob per document. Every save replaces the current state. Natural over object storage, or a single row or file.
+
+  Neither is a degraded version of the other. If your medium cannot cheaply append, the checkpoint profile is the correct answer rather than a workaround.
 - **Registry and hub — shipped.** Without defaults, every single-process service would first write a document registry and an in-process fan-out map: busywork with one correct answer, where each implementer gets the eviction and teardown races wrong differently.
 - **Cluster — optional.** A single process is a first-class configuration, not a degraded one. Persistence takes the cluster fence as *optional*, and `Fence(0)` means "not clustered" rather than "unprotected".
 
@@ -113,13 +117,24 @@ protocol.NewSyncHandler(client).HandleMessage(reply.Bytes(), &unused)
 func TestMyPostgresStore(t *testing.T) {
     newStore := func() persistence.Store { return NewPostgresStore(db) }
 
-    conformance.Persistence(t, newStore)           // every store must pass this
-    conformance.PersistenceFencing(t, newStore)    // only if you report a fenced mode
+    conformance.Persistence(t, newStore)           // every append-log store
     conformance.PersistenceCompaction(t, ...)      // only if you implement Compact
+    conformance.PersistenceFencing(t, newStore)    // only if you report a fenced mode
+    conformance.PersistenceDeletion(t, ...)        // only if you implement Deleter
 }
 ```
 
-`conformance.Memory`, `conformance.Hub` and `conformance.Cluster` do the same for the other ports. Nothing here is optional-by-omission: a store that declares a fence mode is held to it.
+The checkpoint profile has the matching set — `CheckpointPersistence`, `CheckpointPersistenceFencing`, `CheckpointPersistenceDeletion` and `CheckpointPersistenceDeletionFencing` — plus `PersistenceFenceUpgrade` for reading unfenced history through a fenced store. `conformance.Memory`, `conformance.Hub` and `conformance.Cluster` cover the other ports.
+
+Nothing here is optional-by-omission: a store that declares a fence mode is held to it, and **concurrency is not a separate suite you can skip**. Every method may be called concurrently, so the concurrent rules run inside the suites above — concurrent appends keeping distinct increasing revisions, appends racing a compaction surviving it, fence authority decided by a single order, and a checkpoint never loading one save's update beside another save's state vector.
+
+### Declare the codec
+
+A checkpoint stores a Yjs update, and `SaveCheckpointRequest.Encoding` says which codec produced it — `EncodingV1` or `EncodingV2`. It is required, and `LoadCheckpoint` must return what was saved.
+
+This is not bookkeeping. A V1 state-vector decoder applied to V2 update bytes does not fail: it returns no error and a vector describing **zero clients**. A store that derives the codec from the bytes therefore cannot tell "wrong codec" from "empty document", so the data-loss path and the ordinary path look identical from the inside. That is not hypothetical — it reached production in a consumer's store.
+
+If your medium has nowhere to record the codec, support exactly one and reject the others with `ErrUnsupportedEncoding`. The suites accommodate that; they will not accommodate guessing.
 
 The suites are adversarial on purpose. An in-process hub is naturally stronger than the `Hub` contract — ordered, no duplicates, no redelivery — so the suite reorders, duplicates and redelivers. Otherwise the shipped default would quietly become the de-facto contract and the first Redis implementation would fail in production against a suite that passed.
 
@@ -141,11 +156,13 @@ Benchmarks live in `bench/`, with matched workloads implemented four times — t
 
 ## Status
 
-Pre-1.0. The CRDT and both wire formats are complete and gated; the backend ports are new and their shape may still move. There are no external consumers, so breaking changes are made when they are the right answer rather than deferred.
+Pre-1.0. The CRDT and both wire formats are complete and gated. The backend ports are newer and their shape may still move: `v0.0.5` changed what context `memory.OpenFunc` receives, and `v0.0.6` made the concurrency rules part of the base persistence suites and removed four conformance functions that had briefly been exported separately.
+
+There are no external consumers, so breaking changes are made when they are the right answer rather than deferred. Read the release notes before moving a pin.
 
 ## Origins
 
-This began as a fork of [skyterra/y-crdt](https://github.com/skyterra/y-crdt) by Qinghui Yao, which provided the initial Go port of the Yjs core and the V1 codec. It has diverged substantially since: 60 Go files became 260, and everything below was added or rewritten — the V2 codec, the sync and awareness protocol package, the backend ports and their conformance suites, the differential oracle, the fuzz targets, and the Yjs-parity work across formatting, snapshots, subdocuments, relative positions and undo.
+This began as a fork of [skyterra/y-crdt](https://github.com/skyterra/y-crdt) by Qinghui Yao, which provided the initial Go port of the Yjs core and the V1 codec. It has diverged substantially since: 60 Go files became 271, and everything below was added or rewritten — the V2 codec, the sync and awareness protocol package, the backend ports and their conformance suites, the differential oracle, the fuzz targets, and the Yjs-parity work across formatting, snapshots, subdocuments, relative positions and undo.
 
 It is a separate project rather than a maintained fork, but the lineage is real and the original copyright stands in [LICENSE](LICENSE) alongside the current one, as MIT requires.
 

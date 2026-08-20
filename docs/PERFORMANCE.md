@@ -21,9 +21,7 @@ serialization paths into bounded clones instead of complete CRDT walks. Servers 
 fleets of mostly-idle documents can opt out per document:
 
 ```go
-doc := y_crdt.NewDoc(guid, true, y_crdt.DefaultGCFilter, nil, false,
-	y_crdt.WithReadCache(false),
-)
+doc := crdt.NewDoc(guid, crdt.WithReadCache(false))
 ```
 
 The option is fixed at construction. Disabling it changes only retained derived state and read
