@@ -14,6 +14,7 @@ package oracle
 // yet done. The four remaining canonical surfaces are added by the phases that build them —
 // `undo` (T027) and `relpos`/`sync`/`awareness` (T042). CanonicalSurfaces below is the full target
 // list, so the gap between target and registered is visible rather than implied.
+
 // CanonicalSurfaces is the full 13-surface target from data-model.md. Registration catches up to
 // it as each surface's generator lands; the difference is reported, never silently tolerated.
 var CanonicalSurfaces = []string{

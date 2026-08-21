@@ -61,7 +61,8 @@ func TestReadContentDocRejectsNonObjectOpts(t *testing.T) {
 // no element bytes must be rejected before make([]any, size) so it cannot
 // trigger an unbounded allocation.
 func TestReadAnyRejectsOversizedArrayLength(t *testing.T) {
-	buf := []byte{117}                        // array tag
+	buf := make([]byte, 0, 16)
+	buf = append(buf, 117)                    // array tag
 	buf = append(buf, uvarintBytes(1<<40)...) // 1 TiB declared length
 	// no element bytes follow -> length far exceeds remaining buffer
 	assertNoPanic(t, "ReadAny(array)", func() {
@@ -120,7 +121,8 @@ func TestReadAnyRejectsDeepObjectNesting(t *testing.T) {
 // state). A state payload that is valid JSON but not an object (here the JSON
 // string "hi") made the old `state.(Object)` panic. Both apply variants must now
 // return ErrMalformedAwarenessState.
-func buildAwarenessUpdate(clientID, clock uint64, stateJSON string) []byte {
+func buildAwarenessUpdate(clientID uint64, stateJSON string) []byte {
+	const clock = uint64(1)
 	enc := newEncoder()
 	writeVarUint(enc, 1) // one entry
 	writeVarUint(enc, clientID)
@@ -132,10 +134,10 @@ func buildAwarenessUpdate(clientID, clock uint64, stateJSON string) []byte {
 func TestApplyAwarenessUpdateRejectsNonObjectState(t *testing.T) {
 	doc := newDoc("g", true, defaultGCFilter, nil, false)
 	aw := NewAwareness(doc)
-	update := buildAwarenessUpdate(99, 1, `"hi"`) // JSON string, not an object
+	update := buildAwarenessUpdate(99, `"hi"`) // JSON string, not an object
 
 	assertNoPanic(t, "ApplyAwarenessUpdate", func() {
-		if err := ApplyAwarenessUpdate(aw, update, "remote"); err != ErrMalformedAwarenessState {
+		if err := ApplyAwarenessUpdate(aw, update, "remote"); !errors.Is(err, ErrMalformedAwarenessState) {
 			t.Fatalf("expected ErrMalformedAwarenessState, got %v", err)
 		}
 	})
@@ -145,10 +147,10 @@ func TestApplyAwarenessUpdateWithoutEventsRejectsNonObjectState(t *testing.T) {
 	doc := newDoc("g", true, defaultGCFilter, nil, false)
 	aw := NewAwareness(doc)
 	// A JSON array is also a non-object.
-	update := buildAwarenessUpdate(99, 1, `[1,2,3]`)
+	update := buildAwarenessUpdate(99, `[1,2,3]`)
 
 	assertNoPanic(t, "applyAwarenessUpdateWithoutEvents", func() {
-		if err := applyAwarenessUpdateWithoutEvents(aw, update); err != ErrMalformedAwarenessState {
+		if err := applyAwarenessUpdateWithoutEvents(aw, update); !errors.Is(err, ErrMalformedAwarenessState) {
 			t.Fatalf("expected ErrMalformedAwarenessState, got %v", err)
 		}
 	})
@@ -159,10 +161,10 @@ func TestApplyAwarenessUpdateWithoutEventsRejectsNonObjectState(t *testing.T) {
 func TestApplyAwarenessUpdateAcceptsNullAndObject(t *testing.T) {
 	doc := newDoc("g", true, defaultGCFilter, nil, false)
 	aw := NewAwareness(doc)
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(1, 1, `{"n":1}`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(1, `{"n":1}`), "remote"); err != nil {
 		t.Fatalf("object state must be accepted, got %v", err)
 	}
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(2, 1, `null`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(2, `null`), "remote"); err != nil {
 		t.Fatalf("null state must be accepted, got %v", err)
 	}
 }
@@ -193,7 +195,7 @@ func TestApplyAwarenessUpdateRejectsTruncatedFrame(t *testing.T) {
 	aw := NewAwareness(doc)
 
 	// Seed a known good state for client 7 at clock 1.
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(7, 1, `{"name":"alice"}`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(7, `{"name":"alice"}`), "remote"); err != nil {
 		t.Fatalf("seeding state must succeed, got %v", err)
 	}
 	if got := aw.GetStates()[7]; got.IsNil() || got.GetOr("name") != "alice" {
@@ -225,7 +227,7 @@ func TestApplyAwarenessUpdateWithoutEventsRejectsTruncatedFrame(t *testing.T) {
 	doc := newDoc("g", true, defaultGCFilter, nil, false)
 	aw := NewAwareness(doc)
 
-	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(7, 1, `{"name":"alice"}`)); err != nil {
+	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(7, `{"name":"alice"}`)); err != nil {
 		t.Fatalf("seeding state must succeed, got %v", err)
 	}
 	truncated := buildTruncatedAwarenessUpdate(7, 2, 64)
@@ -278,10 +280,10 @@ func TestApplyAwarenessUpdateMultiEntryIsAllOrNothing(t *testing.T) {
 	const clientB = 22
 
 	// Pre-seed BOTH clients with known good state at clock 1.
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(clientA, 1, `{"name":"alice"}`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(clientA, `{"name":"alice"}`), "remote"); err != nil {
 		t.Fatalf("seed A failed: %v", err)
 	}
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(clientB, 1, `{"name":"bob"}`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(clientB, `{"name":"bob"}`), "remote"); err != nil {
 		t.Fatalf("seed B failed: %v", err)
 	}
 
@@ -328,10 +330,10 @@ func TestApplyAwarenessUpdateWithoutEventsMultiEntryIsAllOrNothing(t *testing.T)
 	const clientA = 33
 	const clientB = 44
 
-	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(clientA, 1, `{"name":"alice"}`)); err != nil {
+	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(clientA, `{"name":"alice"}`)); err != nil {
 		t.Fatalf("seed A failed: %v", err)
 	}
-	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(clientB, 1, `{"name":"bob"}`)); err != nil {
+	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(clientB, `{"name":"bob"}`)); err != nil {
 		t.Fatalf("seed B failed: %v", err)
 	}
 
@@ -368,7 +370,7 @@ func TestApplyAwarenessUpdateMultiEntryNonObjectIsAllOrNothing(t *testing.T) {
 
 	const clientA = 55
 	const clientB = 66
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(clientA, 1, `{"name":"alice"}`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(clientA, `{"name":"alice"}`), "remote"); err != nil {
 		t.Fatalf("seed A failed: %v", err)
 	}
 
@@ -429,7 +431,7 @@ func TestApplyAwarenessUpdateRejectsHugeEntryCount(t *testing.T) {
 
 	// Pre-seed one client so we can also confirm the rejected frame mutates nothing.
 	const seeded = 7
-	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(seeded, 1, `{"name":"alice"}`), "remote"); err != nil {
+	if err := ApplyAwarenessUpdate(aw, buildAwarenessUpdate(seeded, `{"name":"alice"}`), "remote"); err != nil {
 		t.Fatalf("seed failed: %v", err)
 	}
 
@@ -474,7 +476,7 @@ func TestApplyAwarenessUpdateWithoutEventsRejectsHugeEntryCount(t *testing.T) {
 	aw := NewAwareness(doc)
 
 	const seeded = 9
-	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(seeded, 1, `{"name":"bob"}`)); err != nil {
+	if err := applyAwarenessUpdateWithoutEvents(aw, buildAwarenessUpdate(seeded, `{"name":"bob"}`)); err != nil {
 		t.Fatalf("seed failed: %v", err)
 	}
 

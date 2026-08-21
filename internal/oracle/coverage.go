@@ -72,7 +72,7 @@ func (c *CoverageReport) DeriveFrom(surface string, instance any) {
 
 // Operations lists the derived operations for a surface, sorted.
 func (c *CoverageReport) Operations(surface string) []string {
-	var out []string
+	out := make([]string, 0, len(c.ops[surface]))
 	for op := range c.ops[surface] {
 		out = append(out, op)
 	}

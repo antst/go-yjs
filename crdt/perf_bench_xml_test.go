@@ -13,11 +13,11 @@ import "testing"
 
 const xmlNodes = 500
 
-// benchXmlTree builds a fragment of xmlNodes elements, each carrying two attributes and a text
+// benchXMLTree builds a fragment of xmlNodes elements, each carrying two attributes and a text
 // child, so selector and walker benchmarks traverse real structure rather than a flat list.
-func benchXmlTree() *YXmlFragment {
+func benchXMLTree() *YXmlFragment {
 	doc := perfDoc()
-	f := doc.GetXmlFragment("x")
+	f := doc.GetXMLFragment("x")
 	for i := 0; i < xmlNodes; i++ {
 		el := NewYXmlElement("div")
 		if i%3 == 0 {
@@ -34,7 +34,7 @@ func benchXmlTree() *YXmlFragment {
 }
 
 func BenchmarkXmlQuerySelector(b *testing.B) {
-	f := benchXmlTree()
+	f := benchXMLTree()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -43,7 +43,7 @@ func BenchmarkXmlQuerySelector(b *testing.B) {
 }
 
 func BenchmarkXmlQuerySelectorAll(b *testing.B) {
-	f := benchXmlTree()
+	f := benchXMLTree()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -52,7 +52,7 @@ func BenchmarkXmlQuerySelectorAll(b *testing.B) {
 }
 
 func BenchmarkXmlCreateTreeWalker(b *testing.B) {
-	f := benchXmlTree()
+	f := benchXMLTree()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -64,7 +64,7 @@ func BenchmarkXmlCreateTreeWalker(b *testing.B) {
 }
 
 func BenchmarkXmlToString(b *testing.B) {
-	f := benchXmlTree()
+	f := benchXMLTree()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -73,7 +73,7 @@ func BenchmarkXmlToString(b *testing.B) {
 }
 
 func BenchmarkXmlGetFirstChild(b *testing.B) {
-	f := benchXmlTree()
+	f := benchXMLTree()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -82,7 +82,7 @@ func BenchmarkXmlGetFirstChild(b *testing.B) {
 }
 
 func BenchmarkXmlSlice(b *testing.B) {
-	f := benchXmlTree()
+	f := benchXMLTree()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -94,7 +94,7 @@ func BenchmarkXmlInsertAfter(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		f := perfDoc().GetXmlFragment("x")
+		f := perfDoc().GetXMLFragment("x")
 		first := NewYXmlElement("div")
 		f.Insert(0, ArrayAny{first})
 		b.StartTimer()
@@ -107,8 +107,8 @@ func BenchmarkXmlInsertAfter(b *testing.B) {
 
 // ---------------------------------------------------------------- xml element attributes
 
-func benchXmlElement() *YXmlElement {
-	f := perfDoc().GetXmlFragment("x")
+func benchXMLElement() *YXmlElement {
+	f := perfDoc().GetXMLFragment("x")
 	el := NewYXmlElement("div")
 	f.Insert(0, ArrayAny{el})
 	for i := 0; i < 50; i++ {
@@ -144,7 +144,7 @@ func BenchmarkXmlSetAttribute(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		el := benchXmlElement()
+		el := benchXMLElement()
 		b.StartTimer()
 		for j := 0; j < xmlSetAttributeOverwrites; j++ {
 			el.SetAttribute("id", "x")
@@ -153,7 +153,7 @@ func BenchmarkXmlSetAttribute(b *testing.B) {
 }
 
 func BenchmarkXmlGetAttribute(b *testing.B) {
-	el := benchXmlElement()
+	el := benchXMLElement()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -164,7 +164,7 @@ func BenchmarkXmlGetAttribute(b *testing.B) {
 }
 
 func BenchmarkXmlGetAttributes(b *testing.B) {
-	el := benchXmlElement()
+	el := benchXMLElement()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -176,7 +176,7 @@ func BenchmarkXmlRemoveAttribute(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		el := benchXmlElement()
+		el := benchXMLElement()
 		b.StartTimer()
 		for j := 0; j < 50; j++ {
 			el.RemoveAttribute(mapKey(j))
@@ -206,7 +206,7 @@ func BenchmarkTextApplyDelta(b *testing.B) {
 }
 
 func BenchmarkTextGetAttributes(b *testing.B) {
-	t := benchText(perfSmall)
+	t := benchText()
 	t.SetAttribute("lang", "en")
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -218,7 +218,7 @@ func BenchmarkTextGetAttributes(b *testing.B) {
 // ---------------------------------------------------------------- array traversal variants
 
 func BenchmarkArraySplice(b *testing.B) {
-	a := benchArray(perfSmall)
+	a := benchArray()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -227,7 +227,7 @@ func BenchmarkArraySplice(b *testing.B) {
 }
 
 func BenchmarkArrayMap(b *testing.B) {
-	a := benchArray(perfSmall)
+	a := benchArray()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -278,7 +278,7 @@ func BenchmarkArrayFrom(b *testing.B) {
 }
 
 func BenchmarkMapGetSize(b *testing.B) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

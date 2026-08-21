@@ -101,6 +101,7 @@ func (s *abstractStructBase) missingClient(trans *Transaction, store *structStor
 }
 
 // ---------------------------------------------------------------- from abstract_type.go
+
 // SharedType is the sealed public handle for a heterogeneous Yjs shared type.
 // The unexported marker deliberately prevents independent external
 // implementations: callers may pass and compare the shared types this package
@@ -132,7 +133,11 @@ type abstractType interface {
 	ObserveDeep(f func(interface{}, interface{}))
 	Unobserve(f func(interface{}, interface{}))
 	UnobserveDeep(f func(interface{}, interface{}))
-	ToJson() interface{}
+	// toJSONValue is the polymorphic form, separate from the public ToJSON
+	// because the public one keeps each type's natural Yjs signature:
+	// YXmlText.ToJSON returns the XML string, everything else an interface{}.
+	// Collapsing them would force one of those to be wrong.
+	toJSONValue() interface{}
 	getDeepEventHandler() *eventHandler
 	getEventHandler() *eventHandler
 	setMap(map[string]*itemStruct)
@@ -386,7 +391,9 @@ func (t *abstractTypeBase) firstItem() *itemStruct {
 
 // Creates YEvent and calls all type observers.
 // Must be implemented by each type.
-func (t *abstractTypeBase) callObserver(trans *Transaction, parentSubs ChangedSubs) {
+// callObserver clears search markers for a remote transaction. parentSubs is
+// unused here; abstractType requires it and the real types use it.
+func (t *abstractTypeBase) callObserver(trans *Transaction, _ ChangedSubs) {
 	// yjs: `if (!transaction.local && this._searchMarker) { this._searchMarker.length = 0 }`
 	// — clear the markers but keep the slice non-nil (still ENABLED). Setting it nil
 	// would disable markers permanently (findMarker treats nil as disabled).
@@ -421,7 +428,9 @@ func (t *abstractTypeBase) UnobserveDeep(f func(interface{}, interface{})) {
 	removeEventHandlerListener(t.deepEventHandler, f)
 }
 
-func (t *abstractTypeBase) ToJson() interface{} {
+func (t *abstractTypeBase) toJSONValue() interface{} { return t.ToJSON() }
+
+func (t *abstractTypeBase) ToJSON() interface{} {
 	return nil
 }
 
@@ -494,11 +503,11 @@ func markPositionWithLimit(searchMarker *[]*arraySearchMarker, p *itemStruct, in
 // wrong unit: one large paste is a single ContentString Item, while the cache walks list nodes.
 //
 // This function always returns a refreshed marker (updated timestamp)
-func findMarker(yarray abstractType, index Number) *arraySearchMarker {
+func findMarker(yarray abstractType, index Number) {
 	if yarray.startItem() == nil || index == 0 || *yarray.getSearchMarker() == nil {
-		return nil
+		return
 	}
-	return findMarkerWithItemCount(yarray, index, listItemCount(yarray))
+	findMarkerWithItemCount(yarray, index, listItemCount(yarray))
 }
 
 func findMarkerWithItemCount(yarray abstractType, index, itemCount Number) *arraySearchMarker {
@@ -570,7 +579,7 @@ func findMarkerWithItemCount(yarray abstractType, index, itemCount Number) *arra
 		// smaller; use the actual count when judging cache density.
 		markerLimit = len(*yarray.getSearchMarker())
 	}
-	if marker != nil && Number(math.Abs(float64(marker.index-pindex))) < p.parent.(abstractType).GetLength()/Number(markerLimit) {
+	if marker != nil && Number(math.Abs(float64(marker.index-pindex))) < p.parent.(abstractType).GetLength()/markerLimit {
 		// adjust existing marker
 		overwriteMarker(marker, p, pindex)
 		return marker
@@ -846,7 +855,7 @@ func existingTypeEventHandlers(t abstractType) (*eventHandler, *eventHandler) {
 		return value.eventHandler, value.deepEventHandler
 	case *YXmlText:
 		return value.eventHandler, value.deepEventHandler
-	case *yXmlHook:
+	case *yXMLHook:
 		return value.eventHandler, value.deepEventHandler
 	case *yString:
 		return value.eventHandler, value.deepEventHandler
@@ -1078,7 +1087,7 @@ func typeListPushGenerics(trans *Transaction, parent abstractType, content Array
 func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, referenceItem *itemStruct, content ArrayAny) error {
 	left := referenceItem
 	doc := trans.doc
-	ownClientId := doc.ClientID
+	ownClientID := doc.ClientID
 	store := doc.store
 
 	var right *itemStruct
@@ -1098,10 +1107,10 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 	// them requires routing through updateMarkerChanges.
 	if trans.compactState && trans.changedTypes == nil && right == nil && left != nil &&
 		left.right == nil && left.parentSub == "" && !left.isDeleted() && left.countable() &&
-		left.redone == nil && left.rightOrigin == nil && left.id.Client == ownClientId &&
+		left.redone == nil && left.rightOrigin == nil && left.id.Client == ownClientID &&
 		left.parent == parent && (parent.getItem() == nil || !parent.getItem().isDeleted()) &&
 		!hasTypeObservers(parent) {
-		clientStructs, exists := store.clientStructs(ownClientId)
+		clientStructs, exists := store.clientStructs(ownClientID)
 		if exists {
 			lastStruct := clientStructs.lastValue()
 			if lastStruct.getID().Clock+lastStruct.structLength() == left.id.Clock+left.length {
@@ -1119,7 +1128,7 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 					clientStructs.refreshValue(left)
 					parent.updateLength(len(content))
 					if doc.positionIndexes != nil {
-						updateListPositionIndexAfterTailGrowth(parent, left, Number(len(content)))
+						updateListPositionIndexAfterTailGrowth(parent, left, len(content))
 					}
 					return nil
 				}
@@ -1134,7 +1143,7 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 			storage := doc.allocateTypeItemStorage()
 			storage.content.value = nested
 			left = initItemWithLength(&storage.item,
-				GenID(ownClientId, getState(store, ownClientId)), left, getItemLastID(left),
+				GenID(ownClientID, getState(store, ownClientID)), left, getItemLastID(left),
 				right, getItemID(right), parent, "", &storage.content, 1)
 			if err := left.integrateStruct(trans, 0); err != nil {
 				return err
@@ -1146,7 +1155,7 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 			storage.value[0] = content[0]
 			storage.content.arr = storage.value[:]
 			left = initItemWithLength(&storage.item,
-				GenID(ownClientId, getState(store, ownClientId)), left, getItemLastID(left),
+				GenID(ownClientID, getState(store, ownClientID)), left, getItemLastID(left),
 				right, getItemID(right), parent, "", &storage.content, 1)
 			if err := left.integrateStruct(trans, 0); err != nil {
 				return err
@@ -1156,9 +1165,9 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 	}
 
 	jsonContent := ArrayAny{}
-	packJsonContent := func() error {
+	packJSONContent := func() error {
 		if len(jsonContent) > 0 {
-			left = newItem(GenID(ownClientId, getState(store, ownClientId)), left, getItemLastID(left), right, getItemID(right), parent, "", newContentAny(jsonContent))
+			left = newItem(GenID(ownClientID, getState(store, ownClientID)), left, getItemLastID(left), right, getItemID(right), parent, "", newContentAny(jsonContent))
 			if err := left.integrateStruct(trans, 0); err != nil {
 				return err
 			}
@@ -1175,17 +1184,17 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 			jsonContent = append(jsonContent, c)
 			continue
 		}
-		if err := packJsonContent(); err != nil {
+		if err := packJSONContent(); err != nil {
 			return err
 		}
 		switch c := c.(type) {
 		case []uint8, string:
-			left = newItem(GenID(ownClientId, getState(store, ownClientId)), left, getItemLastID(left), right, getItemID(right), parent, "", newContentBinary(c.([]uint8)))
+			left = newItem(GenID(ownClientID, getState(store, ownClientID)), left, getItemLastID(left), right, getItemID(right), parent, "", newContentBinary(c.([]uint8)))
 			if err := left.integrateStruct(trans, 0); err != nil {
 				return err
 			}
 		case *Doc:
-			left = newItem(GenID(ownClientId, getState(store, ownClientId)), left, getItemLastID(left), right, getItemID(right), parent, "", newContentDoc(c))
+			left = newItem(GenID(ownClientID, getState(store, ownClientID)), left, getItemLastID(left), right, getItemID(right), parent, "", newContentDoc(c))
 			if err := left.integrateStruct(trans, 0); err != nil {
 				return err
 			}
@@ -1194,7 +1203,7 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 				storage := doc.allocateTypeItemStorage()
 				storage.content.value = c.(abstractType)
 				left = initItemWithLength(&storage.item,
-					GenID(ownClientId, getState(store, ownClientId)), left, getItemLastID(left),
+					GenID(ownClientID, getState(store, ownClientID)), left, getItemLastID(left),
 					right, getItemID(right), parent, "", &storage.content, 1)
 				if err := left.integrateStruct(trans, 0); err != nil {
 					return err
@@ -1205,7 +1214,7 @@ func typeListInsertGenericsAfter(trans *Transaction, parent abstractType, refere
 		}
 	}
 
-	if err := packJsonContent(); err != nil {
+	if err := packJSONContent(); err != nil {
 		return err
 	}
 	return nil
@@ -1354,9 +1363,9 @@ func typeMapSet(trans *Transaction, parent abstractType, key string, value inter
 	parentMap := parent.getMap()
 	left := parentMap[key]
 	doc := trans.doc
-	ownClientId := doc.ClientID
-	clientStructs, _ := doc.store.clientStructs(ownClientId)
-	clock := getState(doc.store, ownClientId)
+	ownClientID := doc.ClientID
+	clientStructs, _ := doc.store.clientStructs(ownClientID)
+	clock := getState(doc.store, ownClientID)
 	// nil and primitive any-encodable values batch into ContentAny (see isAnyEncodable); types
 	// with their own content kind ([]uint8→Binary, *Doc→Doc, IAbstractType→Type) get their own.
 	if value == nil || isAnyEncodable(value) {
@@ -1371,7 +1380,7 @@ func typeMapSet(trans *Transaction, parent abstractType, key string, value inter
 		storage.content.arr = storage.value[:]
 		if left == nil {
 			storage.item = itemStruct{
-				abstractStructBase: abstractStructBase{id: GenID(ownClientId, clock), length: 1},
+				abstractStructBase: abstractStructBase{id: GenID(ownClientID, clock), length: 1},
 				parent:             parent,
 				parentSub:          key,
 				content:            &storage.content,
@@ -1379,7 +1388,7 @@ func typeMapSet(trans *Transaction, parent abstractType, key string, value inter
 			}
 			storage.item.integrateNewPrimitiveMapKey(trans, parent, parentMap, clientStructs)
 		} else {
-			item := initItemWithLength(&storage.item, GenID(ownClientId, clock),
+			item := initItemWithLength(&storage.item, GenID(ownClientID, clock),
 				left, getItemLastID(left), nil, nil, parent, key, &storage.content, 1)
 			if left.right == nil {
 				item.integratePrimitiveMapOverwrite(trans, parent, parentMap, clientStructs)
@@ -1402,7 +1411,7 @@ func typeMapSet(trans *Transaction, parent abstractType, key string, value inter
 		if isAbstractType(value) {
 			storage := doc.allocateTypeItemStorage()
 			storage.content.value = value.(abstractType)
-			item := initItemWithLength(&storage.item, GenID(ownClientId, clock), left,
+			item := initItemWithLength(&storage.item, GenID(ownClientID, clock), left,
 				getItemLastID(left), nil, nil, parent, key, &storage.content, 1)
 			if left == nil {
 				item.integrateNewMapKey(trans, parent, parentMap, clientStructs)
@@ -1417,7 +1426,7 @@ func typeMapSet(trans *Transaction, parent abstractType, key string, value inter
 		}
 	}
 
-	item := newItem(GenID(ownClientId, clock), left, getItemLastID(left), nil, nil, parent, key, content)
+	item := newItem(GenID(ownClientID, clock), left, getItemLastID(left), nil, nil, parent, key, content)
 	if left == nil {
 		item.integrateNewMapKey(trans, parent, parentMap, clientStructs)
 	} else {

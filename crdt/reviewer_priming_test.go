@@ -27,7 +27,7 @@ func TestLargeListDefersIndexUntilSecondRead(t *testing.T) {
 	arr := doc.GetArray("a")
 	rng := markerLCG(11)
 	for i := 0; i < deferListReadIndexBuildItems+2_000; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
 	if listItemCount(arr) < deferListReadIndexBuildItems {
 		t.Fatalf("fixture has %d items, need >= %d", listItemCount(arr), deferListReadIndexBuildItems)
@@ -37,21 +37,21 @@ func TestLargeListDefersIndexUntilSecondRead(t *testing.T) {
 	check := func(label string) {
 		t.Helper()
 		for _, i := range []int{1, 7, len(want) / 2, len(want) - 1} {
-			if got := arr.Get(Number(i)); got != want[i] {
+			if got := arr.Get(i); got != want[i] {
 				t.Fatalf("%s: Get(%d)=%v want %v", label, i, got, want[i])
 			}
 		}
 	}
 
 	// First indexed read primes only.
-	_ = arr.Get(Number(len(want) / 3))
+	_ = arr.Get(len(want) / 3)
 	if got := arr.readIndex.Load(); got != primedListReadIndex {
 		t.Fatalf("after first read, cache = %v, want the priming sentinel", got)
 	}
 	check("primed")
 
 	// Second builds the dense snapshot.
-	_ = arr.Get(Number(len(want) / 3))
+	_ = arr.Get(len(want) / 3)
 	idx := arr.readIndex.Load()
 	if idx == primedListReadIndex || idx == buildingListReadIndex || idx == nil {
 		t.Fatalf("after second read, cache = %v, want a published snapshot", idx)
@@ -63,12 +63,12 @@ func TestLargeListDefersIndexUntilSecondRead(t *testing.T) {
 
 	// A mutation must clear the snapshot, and the next single read must NOT rebuild it — that is
 	// the whole point of the deferral, and the property the allocation budget defends.
-	arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{999})
+	arr.Insert(rng(arr.GetLength()+1), ArrayAny{999})
 	if got := arr.readIndex.Load(); got != nil {
 		t.Fatalf("mutation left cache = %v, want nil", got)
 	}
 	want = arr.ToArray()
-	_ = arr.Get(Number(len(want) / 3))
+	_ = arr.Get(len(want) / 3)
 	if got := arr.readIndex.Load(); got != primedListReadIndex {
 		t.Fatalf("read after mutation left cache = %v, want the priming sentinel (a rebuild here "+
 			"is the allocation regression this design exists to avoid)", got)
@@ -83,7 +83,7 @@ func TestSmallListBuildsIndexImmediately(t *testing.T) {
 	arr := doc.GetArray("a")
 	rng := markerLCG(12)
 	for i := 0; i < 3_000; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
 	_ = arr.Get(500)
 	idx := arr.readIndex.Load()

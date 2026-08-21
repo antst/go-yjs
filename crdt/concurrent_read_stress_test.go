@@ -169,7 +169,7 @@ func TestConcurrentEncodeUnderLoad(t *testing.T) {
 					errs <- fmt.Sprintf("worker %d: encode: %v", r, err)
 					return
 				}
-				fresh := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(Number(500+r)))
+				fresh := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(500+r))
 				_ = ApplyUpdateV2(fresh, enc, nil)
 				if got := readAll(fresh); got != want {
 					errs <- fmt.Sprintf("worker %d iter %d: encode/apply round-trip diverged\n"+

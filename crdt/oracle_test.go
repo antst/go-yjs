@@ -83,7 +83,7 @@ func TestOperationCoverage(t *testing.T) {
 	rep.DeriveFrom("text", doc.GetText("t"))
 	rep.DeriveFrom("array", doc.GetArray("a"))
 	rep.DeriveFrom("map", doc.GetMap("m"))
-	rep.DeriveFrom("xml", doc.GetXmlFragment("x"))
+	rep.DeriveFrom("xml", doc.GetXMLFragment("x"))
 
 	// T042a / FR-005a — the DECLARED generator-op -> Go-method mapping.
 	//
@@ -111,20 +111,20 @@ func TestOperationCoverage(t *testing.T) {
 	exercised := map[string][]string{
 		"text": {
 			"Insert", "Delete", "Format", "InsertEmbed", // native_diff_gen.mjs + dir_b
-			"ToDelta", "ToString", "ToJson", "GetAttributes", // read paths, dir_b
+			"ToDelta", "ToString", "ToJSON", "GetAttributes", // read paths, dir_b
 			"ApplyDelta",                                                // native_diff_delta.mjs
 			"Length", "SetAttribute", "RemoveAttribute", "GetAttribute", // attribute paths
 		},
 		"array": {
 			"Insert", "Delete", "Push", "Unshift", "Splice",
-			"Get", "ToArray", "ToJson", "ForEach", "Map", "GetLength", "From",
+			"Get", "ToArray", "ToJSON", "ForEach", "Map", "GetLength", "From",
 		},
 		"map": {
 			"Set", "Delete", "Clear",
-			"Get", "Has", "Keys", "AppendKeys", "Values", "Entries", "ToJson", "ForEach", "Range", "GetSize",
+			"Get", "Has", "Keys", "AppendKeys", "Values", "Entries", "ToJSON", "ForEach", "Range", "GetSize",
 		},
 		"xml": {
-			"Insert", "Delete", "Get", "ToJson", "ToString", "GetLength", "Push", "Unshift",
+			"Insert", "Delete", "Get", "ToJSON", "ToString", "GetLength", "Push", "Unshift",
 			"InsertAfter", "Slice", "ToArray", "CreateTreeWalker", "ForEach",
 			"QuerySelector", "QuerySelectorAll", "GetFirstChild",
 		},
@@ -189,7 +189,7 @@ func TestOperationCoverageOpsAreDeclaredByGenerators(t *testing.T) {
 	rep.DeriveFrom("text", doc.GetText("t"))
 	rep.DeriveFrom("array", doc.GetArray("a"))
 	rep.DeriveFrom("map", doc.GetMap("m"))
-	rep.DeriveFrom("xml", doc.GetXmlFragment("x"))
+	rep.DeriveFrom("xml", doc.GetXMLFragment("x"))
 	for surface, m := range operationOpMappings() {
 		rep.DeclareOpMapping(surface, m)
 	}
@@ -264,14 +264,14 @@ func operationOpMappings() map[string]oracle.OpMapping {
 			// The read sweep (fuzz/harness/reads.mjs + readsText) compares every read operation
 			// per case. Reads cannot be driven as ops — they change nothing — so they are
 			// exercised as observations instead, which is what closed the coverage gap.
-			"_read": {"ToDelta", "ToString", "ToJson", "GetAttributes", "GetAttribute"},
+			"_read": {"ToDelta", "ToString", "ToJSON", "GetAttributes", "GetAttribute"},
 		},
 		"array": {
 			"insert":  {"Insert"},
 			"delete":  {"Delete"},
 			"push":    {"Push"},
 			"unshift": {"Unshift"},
-			"_read":   {"Get", "ToArray", "ToJson", "ForEach", "Map", "From"},
+			"_read":   {"Get", "ToArray", "ToJSON", "ForEach", "Map", "From"},
 		},
 		// NOTE: `_read` entries are exercised by the per-case read sweep, not by a corpus op —
 		// see TestOperationCoverageReadSweep, which asserts the sweep actually calls them.
@@ -279,7 +279,7 @@ func operationOpMappings() map[string]oracle.OpMapping {
 			"set":    {"Set", "GetSize"},
 			"delete": {"Delete"},
 			"clear":  {"Clear"},
-			"_read":  {"Get", "Has", "Keys", "AppendKeys", "Values", "Entries", "ToJson", "ForEach", "Range"},
+			"_read":  {"Get", "Has", "Keys", "AppendKeys", "Values", "Entries", "ToJSON", "ForEach", "Range"},
 		},
 		"xml": {
 			"insElem":         {"Insert"},
@@ -289,7 +289,7 @@ func operationOpMappings() map[string]oracle.OpMapping {
 			"pushElem":        {"Push"},
 			"unshiftElem":     {"Unshift"},
 			"insertAfterElem": {"InsertAfter"},
-			"_read": {"Get", "ToJson", "ToString", "CreateTreeWalker", "Slice", "ToArray",
+			"_read": {"Get", "ToJSON", "ToString", "CreateTreeWalker", "Slice", "ToArray",
 				"QuerySelector", "QuerySelectorAll", "GetFirstChild"},
 		},
 	}
@@ -466,7 +466,7 @@ func goSideFor(t *testing.T, name string, arts probeArtefacts) (string, string, 
 
 	case "xml":
 		d := newDoc()
-		f := d.GetXmlFragment("x")
+		f := d.GetXMLFragment("x")
 		el := NewYXmlElement("div")
 		f.Insert(0, ArrayAny{el})
 		el.SetAttribute("id", "a1")

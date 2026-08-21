@@ -160,18 +160,18 @@ func writeAnyNumber(encoder *bytes.Buffer, f float64) {
 
 // writeAny writes any type to the encoder buffer, byte-identically to lib0's
 // writeAny.
-func writeAny(encoder *bytes.Buffer, any any) error {
-	if isUndefined(any) {
+func writeAny(encoder *bytes.Buffer, value any) error {
+	if isUndefined(value) {
 		writeByte(encoder, 127)
 		return nil
 	}
 
-	if isNull(any) {
+	if isNull(value) {
 		writeByte(encoder, 126)
 		return nil
 	}
 
-	switch v := any.(type) {
+	switch v := value.(type) {
 	case string:
 		writeByte(encoder, 119)
 		if err := writeString(encoder, v); err != nil {

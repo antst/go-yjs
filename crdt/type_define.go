@@ -13,7 +13,7 @@ var (
 	Undefined = UndefinedType{}
 )
 
-// js Number
+// Number is the Go form of a JS Number.
 type Number = int
 
 // Object is the Go analogue of a JS plain object: a string->any map that
@@ -257,7 +257,7 @@ func (o Object) IsNil() bool {
 //
 // THIS BLOCKS THE OBVIOUS COPY-ON-WRITE. The cached read projections spend
 // essentially all their time copying to hand the caller its own storage
-// (perf_bench_ops_test.go: ToJson 46,701 ns against a 2.140 ns floor), and the
+// (perf_bench_ops_test.go: ToJSON 46,701 ns against a 2.140 ns floor), and the
 // natural fix is for ShallowClone to share storage and copy only on write. Done
 // naively that makes a clone share o.d with its source, so sameRef flips to true
 // and attrStrictEqual starts calling two JS-distinct objects ===. Measured, not
@@ -338,7 +338,7 @@ func (o Object) ToMap() map[string]any {
 // json.Marshal(anObject) — and json.Marshal of any value transitively containing
 // Objects — produces byte-identical output to JSON.stringify for our value domain.
 // (marshalJSONOrdered delegates here; this method is what makes plain json.Marshal
-// correct too, e.g. ToJson() round-trips.)
+// correct too, e.g. ToJSON() round-trips.)
 func (o Object) MarshalJSON() ([]byte, error) {
 	var buf bytes.Buffer
 	if err := marshalOrderedObject(&buf, o); err != nil {
@@ -444,18 +444,18 @@ func MakeObject(kv ...any) Object {
 	return o
 }
 
-// js Array<any>
+// ArrayAny is the Go form of a JS Array<any>.
 type ArrayAny = []any
 
-// js undefined
+// UndefinedType is the Go form of JS undefined.
 type UndefinedType struct {
 }
 
-// js null
+// NullType is the Go form of JS null.
 type NullType struct {
 }
 
-// js Set<any>
+// Set is the Go form of a JS Set<any>.
 type Set map[any]bool
 
 // Add adds the given element to the set.

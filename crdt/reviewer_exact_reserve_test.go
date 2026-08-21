@@ -106,7 +106,7 @@ func TestExactReserveOriginCountForWideStrings(t *testing.T) {
 		}
 		// The CRDT length is in UTF-16 code units, which is what "spans more than one clock" means.
 		want := len(utf16.Encode([]rune(s)))
-		if got := int(txt.Length()); got != want {
+		if got := txt.Length(); got != want {
 			t.Fatalf("%q: Length()=%d, want %d UTF-16 units", s, got, want)
 		}
 		// Must survive its own encoding: a wrong origin count shows up as a decode divergence.

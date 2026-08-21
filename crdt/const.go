@@ -53,8 +53,8 @@ const (
 	yArrayRefID = iota
 	yMapRefID
 	yTextRefID
-	yXmlElementRefID
-	yXmlFragmentRefID
-	yXmlHookRefID
-	yXmlTextRefID
+	yXMLElementRefID
+	yXMLFragmentRefID
+	yXMLHookRefID
+	yXMLTextRefID
 )

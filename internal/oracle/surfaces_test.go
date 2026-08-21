@@ -32,11 +32,8 @@ func TestPendingSurfacesAreReported(t *testing.T) {
 	t.Logf("canonical=%d registered=%d pending=%v",
 		len(oracle.CanonicalSurfaces), len(oracle.Default().Names()), pending)
 	for _, p := range pending {
-		switch p {
-		default:
-			t.Errorf("unexpected pending surface %q — every canonical surface must either be "+
-				"registered or be one of the four with a scheduled task", p)
-		}
+		t.Errorf("unexpected pending surface %q — every canonical surface must either be "+
+			"registered or be one of the four with a scheduled task", p)
 	}
 }
 

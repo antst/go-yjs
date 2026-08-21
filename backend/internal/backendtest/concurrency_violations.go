@@ -230,10 +230,15 @@ func (s *BrokenConcurrentStore) Append(ctx context.Context, request persistence.
 		s.gate.waitForPartner()
 
 		s.data.mu.Lock()
-		document.records = append(snapshot[:len(snapshot):len(snapshot)], persistence.Record{
+		// Rebuilt from the stale snapshot rather than from document.records, which
+		// is the defect: whatever committed while this call was parked is dropped.
+		rebuilt := make([]persistence.Record, len(snapshot), len(snapshot)+1)
+		copy(rebuilt, snapshot)
+		rebuilt = append(rebuilt, persistence.Record{
 			Revision: revision,
 			Update:   append([]byte(nil), request.Update...),
 		})
+		document.records = rebuilt
 		s.data.mu.Unlock()
 		return revision, nil
 

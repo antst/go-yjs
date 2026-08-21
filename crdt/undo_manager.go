@@ -160,6 +160,8 @@ func (u *UndoManager) Clear(clearUndoStack, clearRedoStack bool) {
 	}
 }
 
+// StopCapturing prevents the next StackItem from being merged into the current one.
+//
 // UndoManager merges Undo-StackItem if they are created within time-gap
 // smaller than `options.captureTimeout`. Call `um.stopCapturing()` so that the next
 // StackItem won't be merged.

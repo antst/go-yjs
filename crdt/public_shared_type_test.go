@@ -29,7 +29,7 @@ func TestPublicSharedTypeBoundaryIsUsableExternally(t *testing.T) {
 		t.Fatalf("Doc.Get returned %T, want *YMap", constructed)
 	}
 
-	fragment := doc.GetXmlFragment("xml")
+	fragment := doc.GetXMLFragment("xml")
 	first := crdt.NewYXmlElement("first")
 	second := crdt.NewYXmlText()
 	fragment.Insert(0, crdt.ArrayAny{first})

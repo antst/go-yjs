@@ -53,7 +53,7 @@ func lazyFormatArenaFixture(t *testing.T) ([][]byte, [][]byte, []byte, []byte, *
 	partsV2 := make([][]byte, lazyFormatFixtureParts)
 	combined := newDoc("format-combined", false, defaultGCFilter, nil, false, WithClientID(999))
 	for part := range partsV1 {
-		doc := newDoc("format-part", false, defaultGCFilter, nil, false, WithClientID(Number(part+1)))
+		doc := newDoc("format-part", false, defaultGCFilter, nil, false, WithClientID(part+1))
 		delta := make([]EventOperator, lazyFormatFixtureOps)
 		for i := range delta {
 			attrs := newObject()

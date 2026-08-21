@@ -120,7 +120,8 @@ func BenchmarkArrayUnshift(b *testing.B) {
 	}
 }
 
-func benchArray(n int) *YArray {
+func benchArray() *YArray {
+	n := perfSmall
 	a := perfDoc().GetArray("a")
 	for j := 0; j < n; j++ {
 		a.Insert(a.GetLength(), ArrayAny{j})
@@ -129,7 +130,7 @@ func benchArray(n int) *YArray {
 }
 
 func BenchmarkArrayToArray(b *testing.B) {
-	a := benchArray(perfSmall)
+	a := benchArray()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -138,16 +139,16 @@ func BenchmarkArrayToArray(b *testing.B) {
 }
 
 func BenchmarkArrayToJson(b *testing.B) {
-	a := benchArray(perfSmall)
+	a := benchArray()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		benchSinkAny = a.ToJson()
+		benchSinkAny = a.ToJSON()
 	}
 }
 
 func BenchmarkArrayForEach(b *testing.B) {
-	a := benchArray(perfSmall)
+	a := benchArray()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -160,7 +161,7 @@ func BenchmarkArrayForEach(b *testing.B) {
 // Random Get, the read a list consumer actually performs. Sequential Get would ride the search
 // marker and measure the marker rather than the lookup.
 func BenchmarkArrayGetRandom(b *testing.B) {
-	a := benchArray(perfSmall)
+	a := benchArray()
 	rng := perfRand()
 	b.ReportAllocs()
 	b.ResetTimer()
@@ -173,7 +174,8 @@ func BenchmarkArrayGetRandom(b *testing.B) {
 
 // ---------------------------------------------------------------- map
 
-func benchMap(n int) *YMap {
+func benchMap() *YMap {
+	n := perfSmall
 	m := perfDoc().GetMap("m")
 	for j := 0; j < n; j++ {
 		m.Set(mapKey(j), j)
@@ -186,7 +188,7 @@ func mapKey(j int) string {
 }
 
 func BenchmarkMapKeys(b *testing.B) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -195,7 +197,7 @@ func BenchmarkMapKeys(b *testing.B) {
 }
 
 func BenchmarkMapValues(b *testing.B) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -204,7 +206,7 @@ func BenchmarkMapValues(b *testing.B) {
 }
 
 func BenchmarkMapEntries(b *testing.B) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -213,11 +215,11 @@ func BenchmarkMapEntries(b *testing.B) {
 }
 
 func BenchmarkMapToJson(b *testing.B) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		benchSinkAny = m.ToJson()
+		benchSinkAny = m.ToJSON()
 	}
 }
 
@@ -226,7 +228,7 @@ func BenchmarkMapToJson(b *testing.B) {
 // produced a meaningless 4000x, which is the kind of number that looks like a triumph and is
 // actually a harness defect.
 func BenchmarkMapHas(b *testing.B) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -240,7 +242,7 @@ func BenchmarkMapClear(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
 		b.StopTimer()
-		m := benchMap(perfSmall)
+		m := benchMap()
 		b.StartTimer()
 		m.Clear()
 	}
@@ -248,17 +250,18 @@ func BenchmarkMapClear(b *testing.B) {
 
 // ---------------------------------------------------------------- text reads
 
-func benchText(n int) *YText {
+func benchText() *YText {
+	n := perfSmall
 	t := perfDoc().GetText("t")
 	t.Insert(0, perfString(n), Object{})
 	return t
 }
 
-// ToString and ToJson are what a consumer calls on every render, and neither was measured. ToDelta
+// ToString and ToJSON are what a consumer calls on every render, and neither was measured. ToDelta
 // was -- and it is one of only three rows in the whole comparison where we lose -- so its untested
 // siblings are the first place to look for the same cost.
 func BenchmarkTextToString(b *testing.B) {
-	t := benchText(perfSmall)
+	t := benchText()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -267,18 +270,18 @@ func BenchmarkTextToString(b *testing.B) {
 }
 
 func BenchmarkTextToJson(b *testing.B) {
-	t := benchText(perfSmall)
+	t := benchText()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		benchSinkAny = t.ToJson()
+		benchSinkAny = t.ToJSON()
 	}
 }
 
 // Formatted, so ToString walks a fragmented item chain rather than one merged run -- the state a
 // rich-text consumer is actually in.
 func BenchmarkTextToStringFormatted(b *testing.B) {
-	t := benchText(perfSmall)
+	t := benchText()
 	rng := perfRand()
 	for j := 0; j < 500; j++ {
 		attr := newObject()
@@ -295,7 +298,7 @@ func BenchmarkTextToStringFormatted(b *testing.B) {
 func BenchmarkTextInsertEmbed(b *testing.B) {
 	b.ReportAllocs()
 	for i := 0; i < b.N; i++ {
-		t := benchText(perfSmall)
+		t := benchText()
 		for j := 0; j < 200; j++ {
 			embed := newObject()
 			embed.Set("img", "x")

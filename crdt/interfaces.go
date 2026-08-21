@@ -69,7 +69,7 @@ type updateEncoder interface {
 	writeParentInfo(isYKey bool)
 	writeTypeRef(info uint8)
 	writeLength(length Number)
-	writeAnyValue(any any) error
+	writeAnyValue(value any) error
 	writeBuffer(buf []uint8) error
 	writeJSONValue(embed interface{}) error
 	writeKey(key string) error

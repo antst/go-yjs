@@ -542,8 +542,8 @@ func TestContentDocCopyResetsShouldLoadToAutoLoad(t *testing.T) {
 	if cp.doc.ShouldLoad {
 		t.Errorf("Copy of autoLoad=false subdoc: ShouldLoad=true, want false (yjs createDocFromOpts)")
 	}
-	if cp.doc.Guid != "sub" {
-		t.Errorf("Copy lost guid: %q", cp.doc.Guid)
+	if cp.doc.GUID != "sub" {
+		t.Errorf("Copy lost guid: %q", cp.doc.GUID)
 	}
 
 	// autoLoad=true: the copy must be load-pending (ShouldLoad=true).
@@ -655,7 +655,7 @@ func TestRedoOfSubdocInsertionDoesNotCrash(t *testing.T) {
 	if arr.GetLength() != 1 {
 		t.Errorf("after redo: arr len=%d, want 1 (subdoc re-added)", arr.GetLength())
 	}
-	if sub, ok := arr.Get(0).(*Doc); !ok || sub.Guid != "subguid" {
+	if sub, ok := arr.Get(0).(*Doc); !ok || sub.GUID != "subguid" {
 		t.Errorf("redone item is not the subdoc: %#v", arr.Get(0))
 	}
 }
@@ -1186,8 +1186,9 @@ func TestContentTypeDeleteCascadeNestedArrayStart(t *testing.T) {
 
 func TestContentTypeGCCascadeNestedArrayStart(t *testing.T) {
 	doc, outer, nested := buildArrayWithNestedArray(t, true)
-	var ids []ID
-	for _, it := range startItemsOf(nested) {
+	start := startItemsOf(nested)
+	ids := make([]ID, 0, len(start))
+	for _, it := range start {
 		ids = append(ids, *it.getID())
 	}
 	outer.Delete(0, 1)

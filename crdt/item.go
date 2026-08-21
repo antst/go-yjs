@@ -309,14 +309,15 @@ func (item *itemStruct) integrateWithScratch(trans *Transaction, offset Number, 
 			left := item.left
 
 			var o *itemStruct
-			if left != nil {
+			switch {
+			case left != nil:
 				o = left.right
-			} else if item.parentSub != "" {
+			case item.parentSub != "":
 				o = item.parent.(abstractType).getMap()[item.parentSub]
 				for o != nil && o.left != nil {
 					o = o.left
 				}
-			} else {
+			default:
 				o = item.parent.(abstractType).startItem()
 			}
 
@@ -327,11 +328,13 @@ func (item *itemStruct) integrateWithScratch(trans *Transaction, offset Number, 
 			// Let c in conflictingItems, b in itemsBeforeOrigin
 			// ***{origin}bbbb{this}{c,b}{c,b}{o}***
 			// Note that conflictingItems is a subset of itemsBeforeOrigin
+		conflictScan:
 			for o != nil && o != item.right {
 				itemsBeforeOrigin.Add(o)
 				conflictingItems.Add(o)
 
-				if CompareIDs(item.origin, o.origin) {
+				switch {
+				case CompareIDs(item.origin, o.origin):
 					// case 1
 					if o.id.Client < item.id.Client {
 						left = o
@@ -339,16 +342,17 @@ func (item *itemStruct) integrateWithScratch(trans *Transaction, offset Number, 
 					} else if CompareIDs(item.rightOrigin, o.rightOrigin) {
 						// this and o are conflicting and point to the same
 						// integration points. The id decides which item comes first.
-						// Since this is to the left of o, we can break here
-						break
+						// Since this is to the left of o, we can break here.
+						// LABELLED: an unlabelled break would bind to the switch.
+						break conflictScan
 					}
-					//} else if o.Origin != nil && itemsBeforeOrigin.Has(GetItem(trans.Doc.Store, *o.Origin)) {
-				} else if o.origin != nil {
+					// } else if o.Origin != nil && itemsBeforeOrigin.Has(GetItem(trans.Doc.Store, *o.Origin)) {
+				case o.origin != nil:
 					// else, o might be integrated before an item that this conflicts with.
 					// If so, we will find it in the next iterations
 					itemTmp, ok := getStruct(trans.doc.store, *o.origin).(*itemStruct)
 					if !ok || !itemsBeforeOrigin.Has(itemTmp) {
-						break
+						break conflictScan
 					}
 
 					// case 2
@@ -356,8 +360,8 @@ func (item *itemStruct) integrateWithScratch(trans *Transaction, offset Number, 
 						left = o
 						conflictingItems.Reset()
 					}
-				} else {
-					break
+				default:
+					break conflictScan
 				}
 
 				o = o.right
@@ -583,7 +587,6 @@ func (item *itemStruct) mergeWithWithoutReadIndexInvalidation(right abstractStru
 		r.redone == nil &&
 		isSameType(item.content, r.content) &&
 		item.mergeContentWith(r) {
-
 		parent, ok := item.parent.(abstractType)
 		if ok {
 			searchMarker := parent.getSearchMarker()
@@ -777,7 +780,8 @@ func (item *itemStruct) writeStruct(encoder updateEncoder, offset Number) error 
 	if origin == nil && rightOrigin == nil {
 		parent := item.parent
 
-		if isAbstractType(parent) && !isYString(parent) && !isIDPtr(parent) {
+		switch {
+		case isAbstractType(parent) && !isYString(parent) && !isIDPtr(parent):
 			parentItem := parent.(abstractType).getItem()
 			if parentItem == nil {
 				// parent type on y._map
@@ -791,12 +795,12 @@ func (item *itemStruct) writeStruct(encoder updateEncoder, offset Number) error 
 				encoder.writeParentInfo(false)
 				encoder.writeLeftID(&parentItem.id)
 			}
-		} else if isYString(parent) {
+		case isYString(parent):
 			encoder.writeParentInfo(true)
 			if err := encoder.writeStringValue(parent.(*yString).str); err != nil {
 				return err
 			}
-		} else if isIDPtr(parent) && parent.(*ID) != nil {
+		case isIDPtr(parent) && parent.(*ID) != nil:
 			// Guard against a TYPED-NIL *ID parent: isIDPtr matches on type, so a
 			// nil *ID (e.g. from a swallowed decode error upstream) would pass the
 			// type check and WriteLeftID would deref a nil id → SIGSEGV. The lazy
@@ -804,7 +808,7 @@ func (item *itemStruct) writeStruct(encoder updateEncoder, offset Number) error 
 			// defense in depth so a nil *ID parent is never dereferenced here.
 			encoder.writeParentInfo(false)
 			encoder.writeLeftID(parent.(*ID))
-		} else {
+		default:
 			// origin==nil && rightOrigin==nil REQUIRES a parent (root type / yString /
 			// non-nil *ID). Reaching here means an invalid/nil parent, which would
 			// otherwise silently emit a MISALIGNED frame (no parent info written) that
@@ -839,7 +843,6 @@ func newItemWithLength(id ID, left *itemStruct, origin *ID, right *itemStruct, r
 
 func initItemWithLength(item *itemStruct, id ID, left *itemStruct, origin *ID, right *itemStruct, rightOrigin *ID,
 	parent interface{}, parentSub string, content itemContent, length Number) *itemStruct {
-
 	if content == nil {
 		return nil
 	}

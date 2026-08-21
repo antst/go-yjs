@@ -97,7 +97,7 @@ func (it *itemTextListPosition) forward() error {
 	return nil
 }
 
-func findNextPosition(trans *Transaction, pos *itemTextListPosition, count Number) *itemTextListPosition {
+func findNextPosition(trans *Transaction, pos *itemTextListPosition, count Number) {
 	for right := pos.right; right != nil && count > 0; right = pos.right {
 		// yjs findNextPosition: `case ContentFormat` / `default`. All non-format content
 		// advances the walk by its length (FR-014d).
@@ -119,8 +119,6 @@ func findNextPosition(trans *Transaction, pos *itemTextListPosition, count Numbe
 
 		// pos.forward() - we don't forward because that would halve the performance because we already do the checks above
 	}
-
-	return pos
 }
 
 // findPosition resolves the itemTextListPosition at index. When useSearchMarker is
@@ -255,7 +253,7 @@ func minimizeAttributeChanges(currPos *itemTextListPosition, attributes Object) 
 		return
 	}
 
-	isEqual := func(content itemContent, attributes Object) bool {
+	isEqual := func(_ itemContent, attributes Object) bool {
 		cf, ok := currPos.right.content.(*contentFormat)
 		if !ok {
 			return false
@@ -372,7 +370,7 @@ func insertTextContentWithItem(trans *Transaction, parent abstractType, currPos 
 	})
 
 	doc := trans.doc
-	ownClientId := doc.ClientID
+	ownClientID := doc.ClientID
 	minimizeAttributeChanges(currPos, attributes)
 	var negatedData *objectData
 	if scratch != nil {
@@ -386,9 +384,9 @@ func insertTextContentWithItem(trans *Transaction, parent abstractType, currPos 
 	}
 
 	if itemStorage == nil {
-		right = newItem(GenID(ownClientId, getState(doc.store, ownClientId)), left, getItemLastID(left), right, getItemID(right), parent, "", content)
+		right = newItem(GenID(ownClientID, getState(doc.store, ownClientID)), left, getItemLastID(left), right, getItemID(right), parent, "", content)
 	} else {
-		right = initItemWithLength(itemStorage, GenID(ownClientId, getState(doc.store, ownClientId)),
+		right = initItemWithLength(itemStorage, GenID(ownClientID, getState(doc.store, ownClientID)),
 			left, getItemLastID(left), right, getItemID(right), parent, "", content, content.contentLength())
 	}
 	_ = right.integrateStruct(trans, 0)
@@ -400,7 +398,7 @@ func insertTextContentWithItem(trans *Transaction, parent abstractType, currPos 
 
 func formatText(trans *Transaction, parent abstractType, currPos *itemTextListPosition, length Number, attributes Object) {
 	doc := trans.doc
-	ownClientId := doc.ClientID
+	ownClientID := doc.ClientID
 	minimizeAttributeChanges(currPos, attributes)
 	negatedAttributes := insertAttributes(trans, parent, currPos, attributes)
 
@@ -416,9 +414,8 @@ iterationLoop:
 			(negatedAttributes.Len() > 0 &&
 				(currPos.right.isDeleted() || isSameType(currPos.right.content, &contentFormat{})))) {
 		if !currPos.right.isDeleted() {
-			switch currPos.right.content.(type) {
+			switch cf := currPos.right.content.(type) {
 			case *contentFormat:
-				cf := currPos.right.content.(*contentFormat)
 				key, value := cf.key, cf.value
 				attr, exist := attributes.Get(key)
 				if exist {
@@ -464,9 +461,9 @@ iterationLoop:
 	// ends with a newline. We only insert that newline when a new newline is
 	// inserted - i.e when length is bigger than type.length
 	if length > 0 {
-		newlines := strings.Repeat("\n", int(length))
+		newlines := strings.Repeat("\n", length)
 
-		currPos.right = newItem(GenID(ownClientId, getState(doc.store, ownClientId)), currPos.left, getItemLastID(currPos.left), currPos.right, getItemID(currPos.right), parent, "", newContentString(newlines))
+		currPos.right = newItem(GenID(ownClientID, getState(doc.store, ownClientID)), currPos.left, getItemLastID(currPos.left), currPos.right, getItemID(currPos.right), parent, "", newContentString(newlines))
 		_ = currPos.right.integrateStruct(trans, 0)
 		_ = currPos.forward()
 	}
@@ -570,9 +567,9 @@ func cleanupYTextFormatting(t *YText) Number {
 		currentAttributes := newObject()
 		for end != nil {
 			if !end.isDeleted() {
-				switch end.content.(type) {
+				switch c := end.content.(type) {
 				case *contentFormat:
-					updateCurrentAttributes(currentAttributes, end.content.(*contentFormat))
+					updateCurrentAttributes(currentAttributes, c)
 				// yjs cleanupYTextFormatting: `default` — every non-format kind is a
 				// content boundary, so formatting gaps around it are cleaned up rather
 				// than skipped (FR-014d).
@@ -600,7 +597,7 @@ func CleanupYTextFormatting(t *YText) Number {
 	return cleanupYTextFormatting(t)
 }
 
-func deleteText(trans *Transaction, currPos *itemTextListPosition, length Number) *itemTextListPosition {
+func deleteText(trans *Transaction, currPos *itemTextListPosition, length Number) {
 	startLength := length
 	// Correctness 6: SHALLOW copy (Yjs map.copy), sharing nested values by
 	// reference, so cleanupFormattingGap's reference-strict equalAttrs drops a
@@ -639,7 +636,7 @@ func deleteText(trans *Transaction, currPos *itemTextListPosition, length Number
 	// stray `Delete(0, 1)` or an ApplyDelta carrying a delete op would take down the
 	// process. Return the unchanged position instead.
 	if currPos.left == nil && currPos.right == nil {
-		return currPos
+		return
 	}
 
 	var parent abstractType
@@ -652,8 +649,6 @@ func deleteText(trans *Transaction, currPos *itemTextListPosition, length Number
 	if *parent.getSearchMarker() != nil { // yjs: if (parent._searchMarker) — markers ENABLED (non-nil slice)
 		updateMarkerChanges(parent.getSearchMarker(), currPos.index, -startLength+length)
 	}
-
-	return currPos
 }
 
 /*
@@ -683,7 +678,7 @@ func deleteText(trans *Transaction, currPos *itemTextListPosition, length Number
  * @typedef {Object} TextAttributes
  */
 
-// Event that describes the changes on a YText type.
+// YTextEvent describes the changes on a YText type.
 type YTextEvent struct {
 	YEvent
 	ChildListChanged bool        // Whether the children changed.
@@ -710,7 +705,7 @@ func (y *YMapEvent) GetChanges() Object {
 	return y.Changes
 }
 
-// Compute the changes in the delta format.
+// GetDelta computes the changes in the delta format.
 // A {@link https://quilljs.com/docs/delta/|Quill delta}) that represents the changes on the document.
 func (y *YTextEvent) GetDelta() []EventOperator {
 	if y.delta == nil {
@@ -794,22 +789,23 @@ func (y *YTextEvent) GetDelta() []EventOperator {
 			}
 
 			for item != nil {
-				switch item.content.(type) {
+				switch c := item.content.(type) {
 				case *contentEmbed, *contentType:
-					if y.addsStruct(item) {
+					switch {
+					case y.addsStruct(item):
 						if !y.deletesStruct(item) {
 							addOp()
 							action = "insert"
 							insert = item.content.contentValues()[0]
 							addOp()
 						}
-					} else if y.deletesStruct(item) {
+					case y.deletesStruct(item):
 						if action != "delete" {
 							addOp()
 							action = "delete"
 						}
 						deleteLen += 1
-					} else if !item.isDeleted() {
+					case !item.isDeleted():
 						if action != "retain" {
 							addOp()
 							action = "retain"
@@ -818,21 +814,22 @@ func (y *YTextEvent) GetDelta() []EventOperator {
 					}
 
 				case *contentString:
-					if y.addsStruct(item) {
+					switch {
+					case y.addsStruct(item):
 						if !y.deletesStruct(item) {
 							if action != "insert" {
 								addOp()
 								action = "insert"
 							}
-							insertText.Add(item.content.(*contentString).value)
+							insertText.Add(c.value)
 						}
-					} else if y.deletesStruct(item) {
+					case y.deletesStruct(item):
 						if action != "delete" {
 							addOp()
 							action = "delete"
 						}
 						deleteLen += item.length
-					} else if !item.isDeleted() {
+					case !item.isDeleted():
 						if action != "retain" {
 							addOp()
 							action = "retain"
@@ -840,8 +837,9 @@ func (y *YTextEvent) GetDelta() []EventOperator {
 						retain += item.length
 					}
 				case *contentFormat:
-					key, value := item.content.(*contentFormat).key, item.content.(*contentFormat).value
-					if y.addsStruct(item) {
+					key, value := c.key, c.value
+					switch {
+					case y.addsStruct(item):
 						if !y.deletesStruct(item) {
 							curVal := currentAttributes.GetOrNull(key)
 							if !equalAttrs(curVal, value) {
@@ -860,7 +858,7 @@ func (y *YTextEvent) GetDelta() []EventOperator {
 								item.deleteItemStruct(trans)
 							}
 						}
-					} else if y.deletesStruct(item) {
+					case y.deletesStruct(item):
 						oldAttributes.Set(key, value)
 						// yjs: const curVal = currentAttributes.get(key) ?? null.
 						curVal := currentAttributes.GetOrNull(key)
@@ -871,7 +869,7 @@ func (y *YTextEvent) GetDelta() []EventOperator {
 							}
 							attributes.Set(key, curVal)
 						}
-					} else if !item.isDeleted() {
+					case !item.isDeleted():
 						oldAttributes.Set(key, value)
 						// yjs uses `attr !== undefined` (present, even if null), so test
 						// presence via Get's ok, not GetOr != nil (which collapses null).
@@ -947,7 +945,7 @@ func newYTextEvent(ytext *YText, trans *Transaction, subs ChangedSubs) *YTextEve
 	return yTextEvent
 }
 
-// Type that represents text with formatting information.
+// YText represents text with formatting information.
 //
 // This type replaces y-richtext as this implementation is able to handle
 // block formats (format information on a paragraph), embeds (complex elements
@@ -1268,7 +1266,7 @@ func (y *YText) callObserver(trans *Transaction, parentSubs ChangedSubs) {
 	}
 }
 
-// Returns the unformatted string representation of this YText type.
+// ToString returns the unformatted string representation of this YText type.
 func (y *YText) ToString() string {
 	if n := y.start; n != nil && n.right == nil && !n.isDeleted() && n.countable() {
 		if content, ok := n.content.(*contentString); ok {
@@ -1310,11 +1308,13 @@ func (y *YText) ToString() string {
 }
 
 // Returns the unformatted string representation of this YText type.
-func (y *YText) ToJson() interface{} {
+func (y *YText) toJSONValue() interface{} { return y.ToJSON() }
+
+func (y *YText) ToJSON() interface{} {
 	return y.ToString()
 }
 
-// Apply a {@link delta} on this shared YText type.
+// ApplyDelta applies a delta on this shared YText type.
 // sanitize = true
 func (y *YText) ApplyDelta(delta []EventOperator, sanitize bool) {
 	if y.doc != nil {
@@ -1371,7 +1371,7 @@ func (y *YText) ApplyDelta(delta []EventOperator, sanitize bool) {
 						clientStructBase+reserveStructs)
 				}
 			}
-		}, nil, true)
+		})
 	} else {
 		y.pending = append(y.pending, func() {
 			y.ApplyDelta(delta, true)
@@ -1459,7 +1459,7 @@ func freshApplyDeltaCounts(delta []EventOperator, sanitize bool) (structs int, f
 	return structs, formats
 }
 
-// Returns the delta representation of this YText type.
+// ToDelta returns the delta representation of this YText type.
 func (y *YText) ToDelta(snapshot *Snapshot, prevSnapshot *Snapshot, computeYChange func(string, *ID) Object) []EventOperator {
 	plainRead := snapshot == nil && prevSnapshot == nil && computeYChange == nil
 	if plainRead {
@@ -1559,7 +1559,8 @@ func (y *YText) ToDelta(snapshot *Snapshot, prevSnapshot *Snapshot, computeYChan
 					if ychangePresent {
 						currentChange, _ = currentAttributes.GetOr("ychange").(Object)
 					}
-					if snapshot != nil && !visibleNow {
+					switch {
+					case snapshot != nil && !visibleNow:
 						if currentChange.IsNil() || currentChange.GetOr("user") != n.id.Client || currentChange.GetOr("type") != "removed" {
 							packStr()
 							if computeYChange != nil {
@@ -1571,7 +1572,7 @@ func (y *YText) ToDelta(snapshot *Snapshot, prevSnapshot *Snapshot, computeYChan
 							}
 							ychangePresent = true
 						}
-					} else if prevSnapshot != nil && !visibleBefore {
+					case prevSnapshot != nil && !visibleBefore:
 						if currentChange.IsNil() || currentChange.GetOr("user") != n.id.Client || currentChange.GetOr("type") != "added" {
 							packStr()
 							if computeYChange != nil {
@@ -1583,7 +1584,7 @@ func (y *YText) ToDelta(snapshot *Snapshot, prevSnapshot *Snapshot, computeYChan
 							}
 							ychangePresent = true
 						}
-					} else if ychangePresent {
+					case ychangePresent:
 						packStr()
 						currentAttributes.Delete("ychange")
 						ychangePresent = false
@@ -1627,7 +1628,6 @@ func (y *YText) ToDelta(snapshot *Snapshot, prevSnapshot *Snapshot, computeYChan
 						}
 					}
 				}
-
 			}
 			n = n.right
 		}
@@ -1709,7 +1709,7 @@ func (y *YText) tryAppendSoleString(trans *Transaction, index Number, text strin
 	addedLength := Number(1)
 	if len(text) != 1 || text[0] >= utf8.RuneSelf {
 		if isASCIIText(text) {
-			addedLength = Number(len(text))
+			addedLength = len(text)
 		} else {
 			text, addedLength = normalizeNonASCIITextUTF8WithLength(text)
 		}
@@ -1726,7 +1726,7 @@ func (y *YText) tryAppendSoleString(trans *Transaction, index Number, text strin
 
 // Insert text at a given index.
 func (y *YText) Insert(index Number, text string, attributes Object) {
-	if len(text) <= 0 {
+	if len(text) == 0 {
 		return
 	}
 
@@ -1766,7 +1766,7 @@ func (y *YText) Insert(index Number, text string, attributes Object) {
 	}
 }
 
-// Inserts an embed at a index.
+// InsertEmbed inserts an embed at an index.
 func (y *YText) InsertEmbed(index Number, embed Object, attributes Object) {
 	doc := y.doc
 	if doc != nil { // yjs: `if (y !== null)` where y = this.doc — guard on the DOC, not the receiver
@@ -1774,7 +1774,7 @@ func (y *YText) InsertEmbed(index Number, embed Object, attributes Object) {
 			// yjs insertEmbed: findPosition(..., !attributes).
 			pos := findPosition(trans, y, index, attributes.IsNil())
 			insertText(trans, y, pos, embed, attributes)
-		}, nil, true)
+		})
 	} else {
 		y.pending = append(y.pending, func() {
 			y.InsertEmbed(index, embed, attributes)
@@ -1782,7 +1782,7 @@ func (y *YText) InsertEmbed(index Number, embed Object, attributes Object) {
 	}
 }
 
-// Deletes text starting from an index.
+// Delete deletes text starting from an index.
 func (y *YText) Delete(index Number, length Number) {
 	if length == 0 {
 		return
@@ -1794,7 +1794,7 @@ func (y *YText) Delete(index Number, length Number) {
 			// yjs delete: findPosition(..., true) — the search marker is fine, delete
 			// needs no CurrentAttributes.
 			deleteText(trans, findPosition(trans, y, index, true), length)
-		}, nil, true)
+		})
 	} else {
 		y.pending = append(y.pending, func() {
 			y.Delete(index, length)
@@ -1802,7 +1802,7 @@ func (y *YText) Delete(index Number, length Number) {
 	}
 }
 
-// Assigns properties to a range of text.
+// Format assigns properties to a range of text.
 func (y *YText) Format(index Number, length Number, attributes Object) {
 	if length == 0 {
 		return
@@ -1820,8 +1820,7 @@ func (y *YText) Format(index Number, length Number, attributes Object) {
 				return
 			}
 			formatText(trans, y, pos, length, attributes)
-
-		}, nil, true)
+		})
 	} else {
 		y.pending = append(y.pending, func() {
 			y.Format(index, length, attributes)
@@ -1829,12 +1828,12 @@ func (y *YText) Format(index Number, length Number, attributes Object) {
 	}
 }
 
-// Removes an attribute.
+// RemoveAttribute removes an attribute.
 func (y *YText) RemoveAttribute(attributeName string) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			typeMapDelete(trans, y, attributeName)
-		}, nil, true)
+		})
 	} else {
 		y.pending = append(y.pending, func() {
 			y.RemoveAttribute(attributeName)
@@ -1842,12 +1841,12 @@ func (y *YText) RemoveAttribute(attributeName string) {
 	}
 }
 
-// Sets or updates an attribute.
+// SetAttribute sets or updates an attribute.
 func (y *YText) SetAttribute(attributeName string, attributeValue interface{}) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeMapSet(trans, y, attributeName, attributeValue)
-		}, nil, true)
+		})
 	} else {
 		y.pending = append(y.pending, func() {
 			y.SetAttribute(attributeName, attributeValue)
@@ -1855,12 +1854,12 @@ func (y *YText) SetAttribute(attributeName string, attributeValue interface{}) {
 	}
 }
 
-// Returns an attribute value that belongs to the attribute name.
+// GetAttribute returns the attribute value that belongs to the attribute name.
 func (y *YText) GetAttribute(attributeName string) interface{} {
 	return typeMapGet(y, attributeName)
 }
 
-// Returns all attribute name/value pairs in a JSON Object.
+// GetAttributes returns all attribute name/value pairs in a JSON Object.
 func (y *YText) GetAttributes(snapshot *Snapshot) Object {
 	return typeMapGetAll(y)
 }

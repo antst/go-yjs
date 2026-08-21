@@ -1,11 +1,23 @@
+// Package crdt implements the Yjs CRDT algorithms, wire-compatible with the
+// JavaScript reference implementation.
+//
+// It provides Y.Doc and the shared types (Y.Text, Y.Array, Y.Map, Y.XmlFragment,
+// Y.XmlElement, Y.XmlText), both update codecs (V1 and V2), transactions,
+// snapshots, relative positions, an undo manager, awareness, and garbage
+// collection. Byte-for-byte compatibility with the reference is the correctness
+// test and is enforced by a differential oracle rather than by hand-written
+// expectations.
 package crdt
 
 import "fmt"
 
 // ---------------------------------------------------------------- from doc.go
+
+// Doc is a Yjs document: the container for shared types, the transaction
+// boundary, and the unit of synchronisation.
 type Doc struct {
 	*Observable
-	Guid     string
+	GUID     string
 	ClientID Number
 
 	GC           bool
@@ -220,7 +232,8 @@ func (doc *Doc) allocateEmbedItemStorage() *itemWithContentEmbed {
 	return storage
 }
 
-// Notify the parent document that you request to load data into this subdocument (if it is a subdocument).
+// Load notifies the parent document that this subdocument requests its data be
+// loaded (if it is a subdocument).
 //
 //	`load()` might be used in the future to request any provider to load the most current data.
 //	It is safe to call `load()` multiple times.
@@ -239,17 +252,19 @@ func (doc *Doc) GetSubdocs() Set {
 	return doc.subDocs
 }
 
-func (doc *Doc) GetSubdocGuids() Set {
+func (doc *Doc) GetSubdocGUIDs() Set {
 	s := NewSet()
 	for k := range doc.subDocs {
-		// SubDocs holds *Doc (see Destroy/GetSubdocs); yjs getSubdocGuids maps
+		// SubDocs holds *Doc (see Destroy/GetSubdocs); yjs getSubdocGUIDs maps
 		// each subdoc to its guid (new Set(Array.from(this.subdocs).map(d => d.guid))).
-		guid := k.(*Doc).Guid
+		guid := k.(*Doc).GUID
 		s.Add(guid)
 	}
 	return s
 }
 
+// Transact runs f inside a transaction.
+//
 // Changes that happen inside of a transaction are bundled. This means that
 // the observer fires _after_ the transaction is finished and that all changes
 // that happened inside of the transaction are sent as one message to the
@@ -258,7 +273,7 @@ func (doc *Doc) Transact(f func(trans *Transaction), origin interface{}) {
 	Transact(doc, f, origin, true)
 }
 
-// Define a shared data type.
+// Get defines a shared data type.
 //
 // Multiple calls of `y.get(name, TypeConstructor)` yield the same result
 // and do not overwrite each other. I.e.
@@ -407,7 +422,7 @@ func (doc *Doc) GetMap(name string) *YMap {
 	return result
 }
 
-func (doc *Doc) GetXmlFragment(name string) *YXmlFragment {
+func (doc *Doc) GetXMLFragment(name string) *YXmlFragment {
 	if existing, ok := doc.getShared(name); ok {
 		if fragment, isFragment := existing.(*YXmlFragment); isFragment {
 			return fragment
@@ -421,19 +436,19 @@ func (doc *Doc) GetXmlFragment(name string) *YXmlFragment {
 	return result
 }
 
-// Converts the entire document into a js object, recursively traversing each yjs type
+// ToJSON converts the entire document into a js object, recursively traversing each yjs type
 // Doesn't log types that have not been defined (using ydoc.getType(..)).
 //
 // Do not use this method and rather call toJSON directly on the shared types.
-func (doc *Doc) ToJson() Object {
+func (doc *Doc) ToJSON() Object {
 	object := newObject()
 	for key, value := range doc.share {
-		object.Set(key, value.ToJson())
+		object.Set(key, value.toJSONValue())
 	}
 	return object
 }
 
-// Emit `destroy` event and unregister all event handlers.
+// Destroy emits the `destroy` event and unregisters all event handlers.
 func (doc *Doc) Destroy() {
 	// A destroyed document may remain reachable to the caller even after its parent removes it.
 	// Discard its writer-only accelerators now; retaining them cannot preserve CRDT history, and a
@@ -477,7 +492,7 @@ func (doc *Doc) Destroy() {
 			// Rebuild via the shared newSubdocFromOpts (gc=true/autoLoad=false defaults, like
 			// ReadContentDoc), then force ShouldLoad=false — yjs Doc.destroy reconstructs the
 			// subdoc with `shouldLoad: false` (not load-pending until Load()).
-			content.doc = newSubdocFromOpts(doc.Guid, content.opts)
+			content.doc = newSubdocFromOpts(doc.GUID, content.opts)
 			content.doc.ShouldLoad = false
 			content.doc.item = item
 
@@ -561,7 +576,7 @@ func newDoc(guid string, gc bool, gcFilter func(item *itemStruct) bool, meta int
 	doc := &Doc{
 		Observable:       NewObservable(),
 		ClientID:         generateNewClientID(),
-		Guid:             guid,
+		GUID:             guid,
 		GC:               gc,
 		gcFilter:         gcFilter,
 		Meta:             meta,
@@ -577,7 +592,7 @@ func newDoc(guid string, gc bool, gcFilter func(item *itemStruct) bool, meta int
 		// cleanupTransactions, which does `doc.SubDocs.Add(subdoc)` on the parent
 		// doc — an Add into a nil map panics. A nil Set and an empty Set are
 		// indistinguishable for every SubDocs read (range in GetSubdocs /
-		// GetSubdocGuids / Destroy, and Delete), so initializing it here only removes
+		// GetSubdocGUIDs / Destroy, and Delete), so initializing it here only removes
 		// that panic and changes nothing else.
 		subDocs: NewSet(),
 	}
@@ -606,6 +621,7 @@ func NewDoc(guid string, opts ...DocOption) *Doc {
 }
 
 // ---------------------------------------------------------------- from doc_update_subscription.go
+
 // OnUpdate subscribes to the document's byte-level V1 update stream: the exact
 // bytes to persist or broadcast, plus the origin the mutating transaction was
 // given. It returns the handler so it can be passed to OffUpdate.

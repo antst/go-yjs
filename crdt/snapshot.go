@@ -149,7 +149,7 @@ func EmptySnapshot() *Snapshot {
 	return newSnapshot(newDeleteSet(), make(map[Number]Number))
 }
 
-// snapshot(doc)
+// NewSnapshotByDoc returns a snapshot of doc's current state.
 func NewSnapshotByDoc(doc *Doc) *Snapshot {
 	return newSnapshot(newDeleteSetFromStructStore(doc.store), getStateVector(doc.store))
 }

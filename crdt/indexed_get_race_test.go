@@ -14,7 +14,7 @@ func TestIndexedGetIsRaceFreeOnQuiescentArray(t *testing.T) {
 	arr := doc.GetArray("a")
 	const n = 5000
 	for i := 0; i < n; i++ {
-		arr.Insert(Number(i), ArrayAny{i})
+		arr.Insert(i, ArrayAny{i})
 	}
 
 	var wg sync.WaitGroup
@@ -24,7 +24,7 @@ func TestIndexedGetIsRaceFreeOnQuiescentArray(t *testing.T) {
 			defer wg.Done()
 			for r := 0; r < 500; r++ {
 				idx := 1 + (w*997+r*31)%(n-1)
-				if got, ok := arr.Get(Number(idx)).(int); !ok || got != idx {
+				if got, ok := arr.Get(idx).(int); !ok || got != idx {
 					t.Errorf("worker %d: Get(%d) = %v, want %d", w, idx, got, idx)
 					return
 				}
@@ -43,7 +43,7 @@ func TestIndexedGetIsRaceFreeAndIndexedAfterDecode(t *testing.T) {
 	const n = 5000
 	rng := markerLCG(0xD00D)
 	for i := 0; i < n; i++ {
-		srcArr.Insert(Number(rng(srcArr.GetLength()+1)), ArrayAny{i})
+		srcArr.Insert(rng(srcArr.GetLength()+1), ArrayAny{i})
 	}
 	enc, err := EncodeStateAsUpdateV2(src, nil)
 	if err != nil {
@@ -59,7 +59,7 @@ func TestIndexedGetIsRaceFreeAndIndexedAfterDecode(t *testing.T) {
 
 	want := make([]interface{}, n)
 	for i := 0; i < n; i++ {
-		want[i] = arr.Get(Number(i))
+		want[i] = arr.Get(i)
 	}
 	index := arr.readIndex.Load()
 	if index == nil || index == buildingListReadIndex || len(index.positions) < maxSearchMarker/2 {
@@ -73,7 +73,7 @@ func TestIndexedGetIsRaceFreeAndIndexedAfterDecode(t *testing.T) {
 			defer wg.Done()
 			for r := 0; r < 500; r++ {
 				idx := 1 + (w*997+r*31)%(n-1)
-				if got := arr.Get(Number(idx)); got != want[idx] {
+				if got := arr.Get(idx); got != want[idx] {
 					t.Errorf("worker %d: Get(%d) = %v, want %v", w, idx, got, want[idx])
 					return
 				}
@@ -90,7 +90,7 @@ func TestIndexedGetInvalidatesAfterMutation(t *testing.T) {
 	model := make([]int, 0, 5000)
 	for i := 0; i < 5000; i++ {
 		at := rng(len(model) + 1)
-		arr.Insert(Number(at), ArrayAny{i})
+		arr.Insert(at, ArrayAny{i})
 		model = append(model, 0)
 		copy(model[at+1:], model[at:])
 		model[at] = i
@@ -112,7 +112,7 @@ func TestIndexedGetInvalidatesAfterMutation(t *testing.T) {
 	model = append(model[:3456], model[3457:]...)
 
 	for i := range model {
-		got := arr.Get(Number(i))
+		got := arr.Get(i)
 		if i == 1234 {
 			if got != "new" {
 				t.Fatalf("Get(%d) = %v, want new", i, got)
@@ -132,7 +132,7 @@ func TestIndexedGetInvalidatesAfterRemoteMutation(t *testing.T) {
 	arr := source.GetArray("a")
 	rng := markerLCG(0xF00D)
 	for i := 0; i < 5000; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
 	base, err := EncodeStateAsUpdateV2(source, nil)
 	if err != nil {

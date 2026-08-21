@@ -125,14 +125,8 @@ func TestSyncDiff(t *testing.T) {
 
 		// Drive our own exchange with the same shape and require convergence.
 		a, b := docs["A"], docs["B"]
-		if err := syncExchange(a, b); err != nil {
-			t.Errorf("seed %d exchange: %v", c.Seed, err)
-			caseBad = true
-		}
-		if err := syncExchange(b, a); err != nil {
-			t.Errorf("seed %d reverse exchange: %v", c.Seed, err)
-			caseBad = true
-		}
+		syncExchange(a, b)
+		syncExchange(b, a)
 		if caseBad {
 			replyDiv++
 			if len(firstReply) < 8 {
@@ -184,7 +178,7 @@ func TestSyncDiff(t *testing.T) {
 }
 
 // syncExchange drives one full step1/step2 round from `from` to `to`, as a client would.
-func syncExchange(from, to *Doc) error {
+func syncExchange(from, to *Doc) {
 	e1 := newUpdateEncoderV1()
 	writeSyncStep1(e1, from)
 	step1 := e1.toBytes()
@@ -195,5 +189,4 @@ func syncExchange(from, to *Doc) error {
 
 	e3 := newUpdateEncoderV1()
 	readSyncMessageForTest(newUpdateDecoderV1(step2), e3, from, nil)
-	return nil
 }

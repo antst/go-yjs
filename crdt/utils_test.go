@@ -82,71 +82,71 @@ func randString(n int) string {
 func TestSpliceStruc(t *testing.T) {
 	var ss []abstractStruct
 	for i := 0; i < 10; i++ {
-		ss = append(ss, &abstractStructBase{length: Number(i)})
+		ss = append(ss, &abstractStructBase{length: i})
 	}
 
 	elements := []abstractStruct{&abstractStructBase{length: 100}, &abstractStructBase{length: 200}, &abstractStructBase{length: 300}}
 	spliceStruct(&ss, 3, 5, elements)
 
 	for i := 0; i < 3; i++ {
-		if ss[i].structLength() != Number(i) {
+		if ss[i].structLength() != i {
 			t.Errorf("SpliceStruc(ss, 3, 5)[%d] = %d, want %d", i, ss[i].structLength(), i)
 		}
 	}
 
 	for i := 3; i < 6; i++ {
-		if ss[i].structLength() != Number(i-2)*100 {
+		if ss[i].structLength() != (i-2)*100 {
 			t.Errorf("SpliceStruc(ss, 3, 5)[%d] = %d, want %d", i, ss[i].structLength(), (i-2)*100)
 		}
 	}
 
 	for i := 6; i < 8; i++ {
-		if ss[i].structLength() != Number(i+2) {
+		if ss[i].structLength() != i+2 {
 			t.Errorf("SpliceStruc(ss, 3, 5)[%d] = %d, want %d", i, ss[i].structLength(), i+2)
 		}
 	}
 
 	ss = make([]abstractStruct, 0, 10)
 	for i := 0; i < 10; i++ {
-		ss = append(ss, &abstractStructBase{length: Number(i)})
+		ss = append(ss, &abstractStructBase{length: i})
 	}
 
 	spliceStruct(&ss, 3, 1, []abstractStruct{&abstractStructBase{length: 100}, &abstractStructBase{length: 200}})
 	for i := 0; i < 3; i++ {
-		if ss[i].structLength() != Number(i) {
+		if ss[i].structLength() != i {
 			t.Errorf("SpliceStruc(ss, 3, 1)[%d] = %d, want %d", i, ss[i].structLength(), i)
 		}
 	}
 
 	for i := 3; i < 5; i++ {
-		if ss[i].structLength() != Number(i-2)*100 {
+		if ss[i].structLength() != (i-2)*100 {
 			t.Errorf("SpliceStruc(ss, 3, 1)[%d] = %d, want %d", i, ss[i].structLength(), (i-2)*100)
 		}
 	}
 
 	for i := 5; i < 10; i++ {
-		if ss[i].structLength() != Number(i-1) {
+		if ss[i].structLength() != i-1 {
 			t.Errorf("SpliceStruc(ss, 3, 1)[%d] = %d, want %d", i, ss[i].structLength(), i-1)
 		}
 	}
 
 	ss = make([]abstractStruct, 0, 10)
 	for i := 0; i < 8; i++ {
-		ss = append(ss, &abstractStructBase{length: Number(i)})
+		ss = append(ss, &abstractStructBase{length: i})
 	}
 	spliceStruct(&ss, 3, 1, []abstractStruct{&abstractStructBase{length: 100}, &abstractStructBase{length: 200}, &abstractStructBase{length: 300}})
 	for i := 0; i < 3; i++ {
-		if ss[i].structLength() != Number(i) {
+		if ss[i].structLength() != i {
 			t.Errorf("SpliceStruc(ss, 3, 1)[%d] = %d, want %d", i, ss[i].structLength(), i)
 		}
 	}
 	for i := 3; i < 6; i++ {
-		if ss[i].structLength() != Number(i-2)*100 {
+		if ss[i].structLength() != (i-2)*100 {
 			t.Errorf("SpliceStruc(ss, 3, 1)[%d] = %d, want %d", i, ss[i].structLength(), (i-2)*100)
 		}
 	}
 	for i := 6; i < 10; i++ {
-		if ss[i].structLength() != Number(i-2) {
+		if ss[i].structLength() != i-2 {
 			t.Errorf("SpliceStruc(ss, 3, 1)[%d] = %d, want %d", i, ss[i].structLength(), i-2)
 		}
 	}

@@ -81,17 +81,41 @@ transport", no explanation of the type system or the transaction model.
 `docs/USAGE.md` (wiring to a transport, awareness, undo, snapshots). ygo's `docs/` is a reasonable
 shape to study, not to copy.
 
-## 6. Project hygiene
+## 6. Project hygiene — MOSTLY DONE
 
-Absent: `CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, and — most
-actionable — **a committed `.golangci.yml`**.
+`CHANGELOG.md`, `SECURITY.md`, `CONTRIBUTING.md` and a committed `.golangci.yml` now exist. The
+linter config was the one that actually bit: "0 issues" used to depend on whichever defaults the
+locally installed `golangci-lint` had.
 
-The linter config gap is the one that actually bites: CI and every developer run whatever
-`golangci-lint` defaults their installed version has, so "0 issues" is not reproducible across
-machines or across a version bump. Pin the config next to the code.
+Still absent: `CODE_OF_CONDUCT.md`, and no semver commitment. Pre-1.0 makes that fine *today*.
 
-No release process or semver commitment either. Pre-1.0 with no consumers makes that fine *today*;
-it stops being fine the moment anything depends on this.
+### 6a. Linters enabled, and the four that are not
+
+The committed config enables fourteen linters and reports **zero** issues with **no exclusions and
+no `nolint` directives**. Adopting it took ~350 code fixes rather than configuration.
+
+Four linters from the source config are deliberately not enabled. They are listed here with counts
+rather than silenced in the config, because a rule excluded everywhere is a rule you have not
+adopted:
+
+| linter / rule | count | why it is open |
+|---|---|---|
+| `revive: exported` | 239 | Missing godoc on exported identifiers. **Real gap** for a public library and the one worth closing first. The ~70 *malformed* comments staticcheck flags are already fixed; these are the ones missing entirely. |
+| `gosec` | 227 | Dominated by findings its flow analysis cannot clear. Sampled and verified by hand: `G115` at `readV2Column` is guarded by `size > uint64(decoder.Len())`; `G602` at `abstract.go` is guarded by `if left == 0`. Verifying all 145 `G115` sites is the same manual trace the panic audit needed, and adding defensive conversions to a varint codec is a performance-affecting refactor. |
+| `revive: unused-parameter` | 131 | 55 are `trans`. Renaming to `_` deletes the documentation of what the parameter is, on signatures fixed by an interface. |
+| `gocyclo` | 113 | CRDT integration reaches complexity 59. Splitting it affects inlining on the hottest path and makes the Go code diverge structurally from the Yjs source that encoding bugs are audited against. |
+| `revive: bool-literal-in-expr` | 11 | 11 of the 13 findings compare an `interface{}` value to a bool literal (`m.Get("b") != true`), where the suggested `!x` rewrite does not compile. The 2 that were genuinely `bool` are fixed. |
+
+Two things learned adopting it, worth keeping:
+
+- **`gocritic`'s `ifElseChain` is not safe to apply mechanically.** Rewriting `if/else` to `switch`
+  changes `break` semantics — a `break` that exited the *loop* starts exiting the *switch*. This
+  introduced a real infinite-loop bug in `merge.go`, caught by `govet`; `item.go`'s integration loop
+  had three loop-breaking `break`s inside a chain gocritic wanted rewritten. Both now use labelled
+  breaks. **Do not run `--fix` on this repository without reading the diff.**
+- **Disabling `revive: exported` moves its findings to staticcheck**, which enforces the same thing
+  via `ST1020`/`ST1021`/`ST1022`. golangci-lint deduplicates them, so the gap cannot be dodged by
+  choosing a different linter.
 
 ## 7. Code organisation
 

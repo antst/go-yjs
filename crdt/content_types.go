@@ -297,7 +297,7 @@ func (c *contentDoc) copyContent() itemContent {
 	// NOT from the live c.Doc.GC/Meta/AutoLoad fields: Opts is the immutable snapshot
 	// captured at NewContentDoc, so a copy can't drift if those public Doc fields are
 	// later mutated. (newSubdocFromOpts sets ShouldLoad = autoLoad, as before.)
-	return newContentDoc(newSubdocFromOpts(c.doc.Guid, c.opts))
+	return newContentDoc(newSubdocFromOpts(c.doc.GUID, c.opts))
 }
 
 func (c *contentDoc) spliceContent(offset Number) itemContent {
@@ -335,7 +335,7 @@ func (c *contentDoc) gcContent(store *structStore) {
 }
 
 func (c *contentDoc) writeContent(encoder updateEncoder, offset Number) error {
-	err := encoder.writeStringValue(c.doc.Guid)
+	err := encoder.writeStringValue(c.doc.GUID)
 	if err != nil {
 		return err
 	}
@@ -394,7 +394,7 @@ func readContentDoc(decoder updateDecoder) (itemContent, error) {
 		return nil, err
 	}
 
-	any, err := decoder.readAnyValue()
+	decoded, err := decoder.readAnyValue()
 	if err != nil {
 		return nil, err
 	}
@@ -403,9 +403,9 @@ func readContentDoc(decoder updateDecoder) (itemContent, error) {
 	// ReadAny can yield any lib0 type (a string, number, array, ...); an unchecked
 	// type assertion would panic and crash the process. Surface a decode error
 	// instead so it propagates up ReadItemContent -> the apply/merge/convert path.
-	opts, ok := any.(Object)
+	opts, ok := decoded.(Object)
 	if !ok {
-		return nil, fmt.Errorf("read content doc: opts is %T, want Object", any)
+		return nil, fmt.Errorf("read content doc: opts is %T, want Object", decoded)
 	}
 
 	// yjs createDocFromOpts: a decoded subdoc loads only when shouldLoad || autoLoad;
@@ -786,7 +786,7 @@ func (c *contentString) contentLength() Number {
 		c.utf16Index = nil
 	}
 
-	length := Number(len(c.value))
+	length := len(c.value)
 	if len(c.value) != 1 || c.value[0] >= utf8.RuneSelf {
 		if !isASCIIText(c.value) {
 			c.value, length = normalizeNonASCIITextUTF8WithLength(c.value)
@@ -850,7 +850,8 @@ func (c *contentString) spliceWithLengthIntoBacking(
 	keepsBacking := validatedASCII
 	var sharedUTF16Index *contentStringUTF16Index
 	leftLength, rightLength := offset, length-offset
-	if validatedASCII {
+	switch {
+	case validatedASCII:
 		// UTF-8 uses at least as many bytes as UTF-16 uses code units, with
 		// equality only when every unit occupies one byte (ASCII; invalid UTF-8
 		// bytes also advance Go's range by one byte and one replacement rune).
@@ -861,7 +862,7 @@ func (c *contentString) spliceWithLengthIntoBacking(
 		}
 		leftLength, rightLength = offset, length-offset
 		left, right = c.value[:offset], c.value[offset:]
-	} else if offset <= 8 {
+	case offset <= 8:
 		// Front splits were already O(offset). Keep very small offsets on that
 		// bounded path instead of building or consulting an index merely to
 		// avoid a scan of one or two runes. An existing index still follows the
@@ -873,11 +874,11 @@ func (c *contentString) spliceWithLengthIntoBacking(
 				sharedUTF16Index = c.utf16Index
 			}
 		}
-	} else if c.utf16Index == nil && length < contentStringUTF16IndexThreshold {
+	case c.utf16Index == nil && length < contentStringUTF16IndexThreshold:
 		// Do not scan a short value once to discover that it is below the
 		// activation threshold and then scan it again to perform the split.
 		left, right, keepsBacking = splitStringUTF16AtBoundary(c.value, offset)
-	} else {
+	default:
 		index := c.validUTF16Index()
 		if index == nil {
 			index = buildContentStringUTF16Index(c.value, length)
@@ -938,14 +939,14 @@ func buildContentStringUTF16Index(source string, lengthHint Number) *contentStri
 	// The owning Item's length is authoritative on internal paths and gives an
 	// exact capacity hint. Clamp it for callers that retained a stale length
 	// after replacing value directly inside the package.
-	maxHint := Number(len(source)) * 2
+	maxHint := len(source) * 2
 	if lengthHint < contentStringUTF16IndexThreshold {
 		lengthHint = contentStringUTF16IndexThreshold
 	}
 	if lengthHint > maxHint {
 		lengthHint = maxHint
 	}
-	sampleCapacity := int(lengthHint/contentStringUTF16IndexStride) + 2
+	sampleCapacity := lengthHint/contentStringUTF16IndexStride + 2
 
 	var samples []contentStringUTF16Sample
 	units := Number(0)

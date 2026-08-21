@@ -22,7 +22,7 @@ func BenchmarkMergeDeleteSets(b *testing.B) {
 			sets[setIndex] = newDeleteSet()
 			for client := Number(0); client < 16; client++ {
 				for item := Number(0); item < 4; item++ {
-					addToDeleteSet(sets[setIndex], client, Number(setIndex)*64+item*2, 1)
+					addToDeleteSet(sets[setIndex], client, setIndex*64+item*2, 1)
 				}
 			}
 		}
@@ -38,7 +38,7 @@ func BenchmarkMergeDeleteSets(b *testing.B) {
 			sets := make([]*deleteSet, setCount)
 			for setIndex := range sets {
 				sets[setIndex] = newDeleteSet()
-				addToDeleteSet(sets[setIndex], Number(setIndex), 0, 1)
+				addToDeleteSet(sets[setIndex], setIndex, 0, 1)
 			}
 			b.ReportAllocs()
 			b.ResetTimer()
@@ -123,7 +123,7 @@ func TestMergeDeleteSetsAvoidsReflectiveRangeCopies(t *testing.T) {
 	sets := make([]*deleteSet, clients)
 	for i := range sets {
 		sets[i] = newDeleteSet()
-		addToDeleteSet(sets[i], Number(i), 0, 1)
+		addToDeleteSet(sets[i], i, 0, 1)
 	}
 	if len(sets) != clients || len(sets[clients-1].clients) != 1 {
 		t.Fatal("allocation fixture did not create one distinct client per set")
@@ -313,14 +313,14 @@ func TestReadClientsStructRefsAcceptsLargeLegitimateUpdate(t *testing.T) {
 	}
 
 	// And the full apply round-trips to the same map contents. (Map size is
-	// observed via ToJson; AbstractType.Length is not maintained for maps.)
+	// observed via ToJSON; AbstractType.Length is not maintained for maps.)
 	rt := newDoc("", false, nil, nil, false)
 	_ = ApplyUpdateV2(rt, updateV2, nil)
-	// ToJson() returns the insertion-ordered Object type (previously a
+	// ToJSON() returns the insertion-ordered Object type (previously a
 	// map[string]any alias). Assert against it via the Object API.
-	got, ok := rt.GetMap("m").ToJson().(Object)
+	got, ok := rt.GetMap("m").ToJSON().(Object)
 	if !ok {
-		t.Fatalf("round-trip map ToJson not an Object: %T", rt.GetMap("m").ToJson())
+		t.Fatalf("round-trip map ToJSON not an Object: %T", rt.GetMap("m").ToJSON())
 	}
 	if got.Len() != n {
 		t.Fatalf("round-trip map size = %d, want %d", got.Len(), n)
@@ -458,7 +458,7 @@ func TestOOMAttackHeapBoundedAcrossInputSizes(t *testing.T) {
 		{"~1MB", 1 << 20},
 	}
 
-	var deltas []int64
+	deltas := make([]int64, 0, len(sizes))
 	for _, s := range sizes {
 		update := buildV2OOMUpdatePadded(numberOfStructs, s.pad)
 		grew, err := decodeHeapDelta(t, update)
@@ -610,7 +610,7 @@ func BenchmarkMergeUpdatesReaderCount(b *testing.B) {
 		b.Run(fmt.Sprintf("readers-%d", readers), func(b *testing.B) {
 			updates := make([][]uint8, readers)
 			for i := range updates {
-				doc := newDoc(fmt.Sprintf("merge-reader-%d", i), false, nil, nil, false, WithClientID(Number(i+1)))
+				doc := newDoc(fmt.Sprintf("merge-reader-%d", i), false, nil, nil, false, WithClientID(i+1))
 				doc.GetText("t").Insert(0, "x", Object{})
 				var err error
 				updates[i], err = EncodeStateAsUpdate(doc, nil)
@@ -768,7 +768,7 @@ func TestMergeUpdatesSchedulerKeepsEveryReader(t *testing.T) {
 	const readerCount = 257
 	updates := make([][]uint8, readerCount)
 	for i := range updates {
-		client := Number(i + 1)
+		client := i + 1
 		doc := newDoc("scheduler-pointer-source", false, nil, nil, false, WithClientID(client))
 		doc.GetText("t").Insert(0, "x", Object{})
 		var err error
@@ -785,7 +785,7 @@ func TestMergeUpdatesSchedulerKeepsEveryReader(t *testing.T) {
 	reader := newLazyStructReader(newDecoderV1(merged), false)
 	seen := 0
 	for current := reader.curr; current != nil; current = reader.nextStruct() {
-		wantClient := Number(readerCount - seen)
+		wantClient := readerCount - seen
 		if got := current.getID().Client; got != wantClient {
 			t.Fatalf("struct %d client=%d, want descending client %d", seen, got, wantClient)
 		}
@@ -805,7 +805,7 @@ func TestMergeUpdatesSchedulerAvoidsPerReaderEntryAllocations(t *testing.T) {
 	const readerCount = 256
 	updates := make([][]uint8, readerCount)
 	for i := range updates {
-		client := Number(i + 1)
+		client := i + 1
 		doc := newDoc("scheduler-allocation-source", false, nil, nil, false, WithClientID(client))
 		doc.GetText("t").Insert(0, "x", Object{})
 		var err error

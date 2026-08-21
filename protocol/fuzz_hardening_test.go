@@ -82,11 +82,11 @@ func protocolClampForFuzz(raw []byte) []byte {
 	if len(raw) > protocolFuzzMaxInputBytes {
 		raw = raw[:protocolFuzzMaxInputBytes]
 	}
-	copy := append([]byte(nil), raw...)
-	if copy == nil {
+	dup := append([]byte(nil), raw...)
+	if dup == nil {
 		return []byte{}
 	}
-	return copy
+	return dup
 }
 
 func protocolAllocBudgetFor(b allocBudget, n int) int64 {

@@ -46,7 +46,7 @@ func TestIntDiffOptRleDecoderRejectsOverflowRunLength(t *testing.T) {
 	// (hasCount) signals "a run follows". encodedDiff = 1 -> magnitude 1, positive
 	// (single byte 0x01), then the run-count varint.
 	buf := new(bytes.Buffer)
-	writeVarIntSigned(buf, 1, false) // encodedDiff = 1 => hasCount set
+	writeVarIntSigned(buf, 1) // encodedDiff = 1 => hasCount set
 	data := appendUvarint(buf.Bytes(), uint64(math.MaxInt32)+1)
 	d := newIntDiffOptRLEDecoder(data)
 	if _, err := d.readValue(); err == nil {
@@ -111,7 +111,7 @@ func TestIntDiffOptRleDecoderAcceptsMaximalRunRejectsOverBound(t *testing.T) {
 	// At-bound: count == maxRleRunCount -> encoded = maxRleRunCount-2 (must pass).
 	// Over-bound: count == maxRleRunCount+1 -> encoded = maxRleRunCount-1 (must err).
 	atBuf := new(bytes.Buffer)
-	writeVarIntSigned(atBuf, 1, false) // encodedDiff = 1 => hasCount set
+	writeVarIntSigned(atBuf, 1) // encodedDiff = 1 => hasCount set
 	atBound := appendUvarint(atBuf.Bytes(), maxRleRunCount-2)
 	d := newIntDiffOptRLEDecoder(atBound)
 	if _, err := d.readValue(); err != nil {
@@ -119,7 +119,7 @@ func TestIntDiffOptRleDecoderAcceptsMaximalRunRejectsOverBound(t *testing.T) {
 	}
 
 	overBuf := new(bytes.Buffer)
-	writeVarIntSigned(overBuf, 1, false)
+	writeVarIntSigned(overBuf, 1)
 	overBound := appendUvarint(overBuf.Bytes(), maxRleRunCount-1) // count = maxRleRunCount+1
 	d = newIntDiffOptRLEDecoder(overBound)
 	if _, err := d.readValue(); err == nil {

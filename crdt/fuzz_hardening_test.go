@@ -108,11 +108,11 @@ func crdtClampForFuzz(raw []byte) []byte {
 	if len(raw) > crdtFuzzMaxInputBytes {
 		raw = raw[:crdtFuzzMaxInputBytes]
 	}
-	copy := append([]byte(nil), raw...)
-	if copy == nil {
+	dup := append([]byte(nil), raw...)
+	if dup == nil {
 		return []byte{}
 	}
-	return copy
+	return dup
 }
 
 func crdtAllocBudgetFor(b allocBudget, n int) int64 {

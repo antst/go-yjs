@@ -160,7 +160,7 @@ func (l *clientStructList) Find(clock Number) (clientStructCursor, error) {
 		l.oracle.checkFind(clock, nil, false)
 		return clientStructCursor{}, err
 	}
-	cursor := l.cursorAt(int(index))
+	cursor := l.cursorAt(index)
 	if clientStructListOracleEnabled {
 		l.oracle.checkFind(clock, cursor.Value(), true)
 	}
@@ -203,7 +203,7 @@ func (l *clientStructList) InsertAfter(cursor clientStructCursor, value abstract
 		return l.cursorAtTree(inserted)
 	}
 	inserted := cursor.flatPosition() + 1
-	spliceStruct(&l.items, Number(inserted), 0, []abstractStruct{value})
+	spliceStruct(&l.items, inserted, 0, []abstractStruct{value})
 	l.generation++
 	l.oracle.insert(value)
 	l.oracle.checkList(l)
@@ -265,7 +265,7 @@ func (l *clientStructList) Remove(first, last clientStructCursor) (clientStructC
 	}
 	start := first.flatPosition()
 	lastPosition := last.flatPosition()
-	spliceStruct(&l.items, Number(start), Number(lastPosition-start+1), nil)
+	spliceStruct(&l.items, start, lastPosition-start+1, nil)
 	l.generation++
 	l.oracle.checkList(l)
 	if start >= len(l.items) {
@@ -328,7 +328,7 @@ func (l *clientStructList) applyDeleteRangeFlat(trans *Transaction, clock, clock
 	if err != nil {
 		return err
 	}
-	index := int(position)
+	index := position
 	first := l.items[index]
 	if first.isDeleted() && clockEnd <= first.getID().Clock+first.structLength() {
 		return nil
@@ -770,10 +770,10 @@ func (l *clientStructList) mergeAround(clock Number) {
 			return
 		}
 		if position+1 < len(l.items) {
-			l.tryMergeWithLeft(int(position + 1))
+			l.tryMergeWithLeft(position + 1)
 		}
 		if position > 0 {
-			l.tryMergeWithLeft(int(position))
+			l.tryMergeWithLeft(position)
 		}
 		return
 	}
@@ -782,10 +782,10 @@ func (l *clientStructList) mergeAround(clock Number) {
 		return
 	}
 	if position+1 < l.Len() {
-		l.tryMergeWithLeft(int(position + 1))
+		l.tryMergeWithLeft(position + 1)
 	}
 	if position > 0 {
-		l.tryMergeWithLeft(int(position))
+		l.tryMergeWithLeft(position)
 	}
 }
 
@@ -878,7 +878,7 @@ func (l *clientStructList) coalesceContentAnyRuns(start Number) {
 			mergedEnd = i + 1
 		}
 		if mergedEnd > start+1 {
-			l.removePositions(int(start+1), int(mergedEnd-start-1))
+			l.removePositions(start+1, mergedEnd-start-1)
 		}
 		start++
 	}
@@ -943,7 +943,7 @@ func (l *clientStructList) coalesceContentStringRun(start Number, left, right *i
 	}
 	leftContent.setMergedString(combined.String())
 	if mergedEnd > start+1 {
-		l.removePositions(int(start+1), int(mergedEnd-start-1))
+		l.removePositions(start+1, mergedEnd-start-1)
 	}
 	return true
 }
@@ -952,7 +952,7 @@ func (l *clientStructList) coalesceContentAnyRunsTree(start Number) {
 	if start < 0 {
 		start = 0
 	}
-	leftCursor, ok := l.cursorAtPosition(int(start))
+	leftCursor, ok := l.cursorAtPosition(start)
 	if !ok {
 		return
 	}
@@ -1031,7 +1031,7 @@ func (l *clientStructList) coalesceContentStringRunsTree(start Number) {
 	if start < 0 {
 		start = 0
 	}
-	leftCursor, ok := l.cursorAtPosition(int(start))
+	leftCursor, ok := l.cursorAtPosition(start)
 	if !ok {
 		return
 	}
@@ -1123,7 +1123,7 @@ func (l *clientStructList) removePositions(start, count int) {
 	}
 	removed := l.items[start : start+count]
 	l.oracle.remove(removed)
-	spliceStruct(&l.items, Number(start), Number(count), nil)
+	spliceStruct(&l.items, start, count, nil)
 	l.generation++
 	l.oracle.checkList(l)
 }
@@ -1169,7 +1169,7 @@ func (l *clientStructList) findIndex(clock Number) (int, error) {
 		return tree.Index(cursor), nil
 	}
 	index, err := findIndexSS(l.items, clock)
-	return int(index), err
+	return index, err
 }
 
 func (l *clientStructList) forEachChunk(visit func([]abstractStruct) bool) {

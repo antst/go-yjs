@@ -19,7 +19,7 @@ func buildActivationTextDoc(tb testing.TB, client Number, deletes int) *Doc {
 		if length < 2 {
 			tb.Fatal("activation fixture exhausted its text")
 		}
-		text.Delete(rng.intn(int(length-1)), 1)
+		text.Delete(rng.intn(length-1), 1)
 	}
 	return doc
 }
@@ -49,7 +49,7 @@ func BenchmarkStructTreeActivationRandomDelete(b *testing.B) {
 				rng := perfRand()
 				b.StartTimer()
 				for operation := 0; operation < deletes; operation++ {
-					text.Delete(rng.intn(int(text.Length()-1)), 1)
+					text.Delete(rng.intn(text.Length()-1), 1)
 				}
 				b.StopTimer()
 				list, ok := doc.store.clientStructs(doc.ClientID)

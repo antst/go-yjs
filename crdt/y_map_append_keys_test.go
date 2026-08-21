@@ -101,11 +101,11 @@ func TestYMapAppendKeysFromJSONCacheIsCallerOwned(t *testing.T) {
 	ym.Set("a", 1)
 	ym.Set("b", 2)
 	for i := 0; i < yMapEntriesCacheThreshold; i++ {
-		_ = ym.ToJson()
+		_ = ym.ToJSON()
 	}
 	cached := ym.jsonCache.Load()
 	if cached == nil {
-		t.Fatal("ToJson reads did not populate the JSON cache")
+		t.Fatal("ToJSON reads did not populate the JSON cache")
 	}
 	want := cached.value.Keys()
 
@@ -128,11 +128,11 @@ func TestYMapAppendKeysNilDestinationFromJSONCacheIsCallerOwned(t *testing.T) {
 	ym.Set("b", 2)
 	ym.Set("c", 3)
 	for i := 0; i < yMapEntriesCacheThreshold; i++ {
-		_ = ym.ToJson()
+		_ = ym.ToJSON()
 	}
 	cached := ym.jsonCache.Load()
 	if cached == nil {
-		t.Fatal("ToJson reads did not populate the JSON cache")
+		t.Fatal("ToJSON reads did not populate the JSON cache")
 	}
 	if cached.value.d == nil || cached.value.d.large == nil {
 		t.Fatal("test fixture did not exercise the large JSON-cache key slice")

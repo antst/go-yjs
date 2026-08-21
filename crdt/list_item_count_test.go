@@ -27,9 +27,9 @@ func TestLinkedItemCountTracksListSurgery(t *testing.T) {
 	rng := markerLCG(0x1CEB00DA)
 	for i := 0; i < 2_000; i++ {
 		if text.Length() > 0 && rng(4) == 0 {
-			text.Delete(Number(rng(text.Length())), 1)
+			text.Delete(rng(text.Length()), 1)
 		} else {
-			text.Insert(Number(rng(text.Length()+1)), "x", Object{})
+			text.Insert(rng(text.Length()+1), "x", Object{})
 		}
 		assertLinkedItemCount(t, text)
 	}
@@ -59,9 +59,9 @@ func TestLinkedItemCountTracksListSurgery(t *testing.T) {
 	Transact(doc, func(*Transaction) {
 		for i := 0; i < 1_000; i++ {
 			if array.GetLength() > 0 && rng(4) == 0 {
-				array.Delete(Number(rng(array.GetLength())), 1)
+				array.Delete(rng(array.GetLength()), 1)
 			} else {
-				array.Insert(Number(rng(array.GetLength()+1)), ArrayAny{i + 10})
+				array.Insert(rng(array.GetLength()+1), ArrayAny{i + 10})
 			}
 			assertLinkedItemCount(t, array)
 		}
@@ -84,7 +84,7 @@ func TestLinkedItemCountResetsWithNestedTypeGC(t *testing.T) {
 	inner := NewYArray()
 	outer.Insert(0, ArrayAny{inner})
 	for i := 0; i < 100; i++ {
-		inner.Insert(Number(i), ArrayAny{i})
+		inner.Insert(i, ArrayAny{i})
 	}
 	if got := assertLinkedItemCount(t, inner); got == 0 {
 		t.Fatal("nested type never acquired linked Items")
@@ -108,7 +108,7 @@ func TestLinkedItemCountUsesPhysicalItemsNotVisibleLength(t *testing.T) {
 
 	rng := markerLCG(0x51A7E)
 	for i := 0; i < 1_000; i++ {
-		text.Insert(Number(rng(text.Length()+1)), "x", Object{})
+		text.Insert(rng(text.Length()+1), "x", Object{})
 	}
 	items := assertLinkedItemCount(t, text)
 	if limit := searchMarkerLimit(items); limit != maxSearchMarker {

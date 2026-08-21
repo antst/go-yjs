@@ -36,7 +36,7 @@ func inCurrentBuild(dir, file string) bool {
 // say that, not "abstract_type.go".
 //
 // name may be a plain function or type name, or a method spelled Receiver.Method.
-func parseProductionFileDeclaring(t *testing.T, name string) (*token.FileSet, *ast.File) {
+func parseProductionFileDeclaring(t *testing.T, name string) *ast.File {
 	t.Helper()
 	receiver, method, isMethod := strings.Cut(name, ".")
 
@@ -65,7 +65,7 @@ func parseProductionFileDeclaring(t *testing.T, name string) (*token.FileSet, *a
 						continue
 					}
 					if receiverTypeName(declaration.Recv.List[0].Type) == receiver {
-						return fset, parsed
+						return parsed
 					}
 					continue
 				}
@@ -74,13 +74,13 @@ func parseProductionFileDeclaring(t *testing.T, name string) (*token.FileSet, *a
 				// subject is "wherever that routine lives" regardless of whether
 				// it happens to have a receiver.
 				if declaration.Name.Name == name {
-					return fset, parsed
+					return parsed
 				}
 			case *ast.GenDecl:
 				for _, specification := range declaration.Specs {
 					spec, ok := specification.(*ast.TypeSpec)
 					if ok && spec.Name.Name == name {
-						return fset, parsed
+						return parsed
 					}
 				}
 			}
@@ -88,7 +88,7 @@ func parseProductionFileDeclaring(t *testing.T, name string) (*token.FileSet, *a
 	}
 	t.Fatalf("no production file declares %q; if it was renamed or removed, "+
 		"update the guard that looks for it", name)
-	return nil, nil
+	return nil
 }
 
 // parseTestFileDeclaring is parseProductionFileDeclaring for TEST sources.

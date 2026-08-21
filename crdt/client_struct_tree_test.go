@@ -70,7 +70,7 @@ func TestClientStructTreeMatchesIndependentFlatOracleAfterEveryPrimitive(t *test
 					last := oracle.items[len(oracle.items)-1]
 					value := &abstractStructBase{
 						id:     GenID(first.id.Client, last.getID().Clock+last.structLength()),
-						length: Number(1 + rng.Intn(8)),
+						length: 1 + rng.Intn(8),
 					}
 					tree.Append(value)
 					if err := oracle.insert(value); err != nil {
@@ -94,7 +94,7 @@ func TestClientStructTreeMatchesIndependentFlatOracleAfterEveryPrimitive(t *test
 						t.Fatal(err)
 					}
 					oldLength := left.structLength()
-					offset := Number(1 + rng.Intn(int(oldLength-1)))
+					offset := 1 + rng.Intn(oldLength-1)
 					left.setStructLength(offset)
 					right := &abstractStructBase{id: GenID(left.getID().Client, left.getID().Clock+offset), length: oldLength - offset}
 					tree.InsertAfter(cursor, right)
@@ -136,7 +136,7 @@ func TestClientStructTreeMatchesIndependentFlatOracleAfterEveryPrimitive(t *test
 				case 4: // independently derived point lookup
 					last := oracle.items[len(oracle.items)-1]
 					end := last.getID().Clock + last.structLength()
-					clock := Number(rng.Intn(int(end)))
+					clock := rng.Intn(end)
 					want, found := oracle.find(clock)
 					cursor, err := tree.Find(clock)
 					if found != (err == nil) {
@@ -237,7 +237,7 @@ func TestClientStructTreeBuildAndCursorContract(t *testing.T) {
 func TestClientStructTreeOrdinalAndChunkCursors(t *testing.T) {
 	values := make([]abstractStruct, 37)
 	for i := range values {
-		values[i] = &abstractStructBase{id: GenID(18, Number(i)), length: 1}
+		values[i] = &abstractStructBase{id: GenID(18, i), length: 1}
 	}
 	tree := newClientStructTreeFromFlat(values, 4, 3)
 	for position, want := range values {
@@ -291,14 +291,14 @@ func TestClientStructTreePreservesMalformedEqualClockOrder(t *testing.T) {
 }
 
 func TestClientStructTreeBorrowMergeAndRootCollapse(t *testing.T) {
-	makeTree := func(count int) (*clientStructTree, []*abstractStructBase) {
+	makeTree := func(count int) *clientStructTree {
 		values := make([]*abstractStructBase, count)
 		abstract := make([]abstractStruct, count)
 		for i := range values {
-			values[i] = &abstractStructBase{id: GenID(8, Number(i)), length: 1}
+			values[i] = &abstractStructBase{id: GenID(8, i), length: 1}
 			abstract[i] = values[i]
 		}
-		return newClientStructTreeFromFlat(abstract, 4, 3), values
+		return newClientStructTreeFromFlat(abstract, 4, 3)
 	}
 	remove := func(t *testing.T, tree *clientStructTree, first, last Number) {
 		t.Helper()
@@ -317,15 +317,15 @@ func TestClientStructTreeBorrowMergeAndRootCollapse(t *testing.T) {
 	}
 
 	t.Run("borrow-right", func(t *testing.T) {
-		tree, _ := makeTree(6) // leaves 3/3, minimum 2
-		remove(t, tree, 0, 1)  // left 1 borrows from right 3 -> 2/2
+		tree := makeTree(6)   // leaves 3/3, minimum 2
+		remove(t, tree, 0, 1) // left 1 borrows from right 3 -> 2/2
 		if tree.first.used != 2 || tree.last.used != 2 || tree.first == tree.last {
 			t.Fatalf("borrow-right leaf occupancies=%d/%d", tree.first.used, tree.last.used)
 		}
 	})
 
 	t.Run("borrow-left", func(t *testing.T) {
-		tree, _ := makeTree(6)
+		tree := makeTree(6)
 		remove(t, tree, 4, 5) // right 1 borrows from left 3 -> 2/2
 		if tree.first.used != 2 || tree.last.used != 2 || tree.first == tree.last {
 			t.Fatalf("borrow-left leaf occupancies=%d/%d", tree.first.used, tree.last.used)
@@ -333,7 +333,7 @@ func TestClientStructTreeBorrowMergeAndRootCollapse(t *testing.T) {
 	})
 
 	t.Run("merge", func(t *testing.T) {
-		tree, _ := makeTree(6)
+		tree := makeTree(6)
 		remove(t, tree, 0, 0) // 2/3
 		remove(t, tree, 5, 5) // 2/2
 		remove(t, tree, 1, 1) // 1/2 merges and collapses root
@@ -343,7 +343,7 @@ func TestClientStructTreeBorrowMergeAndRootCollapse(t *testing.T) {
 	})
 
 	t.Run("multi-level-collapse", func(t *testing.T) {
-		tree, _ := makeTree(80)
+		tree := makeTree(80)
 		if tree.root.branch == nil || tree.root.branch.children[0].branch == nil {
 			t.Fatal("fixture did not build a multi-level tree")
 		}
@@ -358,7 +358,7 @@ func TestClientStructTreeBorrowMergeAndRootCollapse(t *testing.T) {
 func TestClientStructTreeRefreshesMergedPredecessorAcrossLeafBoundary(t *testing.T) {
 	values := make([]abstractStruct, 6)
 	for i := range values {
-		values[i] = &abstractStructBase{id: GenID(9, Number(i)), length: 1}
+		values[i] = &abstractStructBase{id: GenID(9, i), length: 1}
 	}
 	tree := newClientStructTreeFromFlat(values, 4, 3) // leaves 3/3
 	left := values[2]
@@ -442,7 +442,7 @@ func TestClientStructTreeValidatorRejectsGlobalCorruption(t *testing.T) {
 	makeTree := func() *clientStructTree {
 		values := make([]abstractStruct, 20)
 		for i := range values {
-			values[i] = &abstractStructBase{id: GenID(13, Number(i)), length: 1}
+			values[i] = &abstractStructBase{id: GenID(13, i), length: 1}
 		}
 		return newClientStructTreeFromFlat(values, 4, 3)
 	}
@@ -474,7 +474,7 @@ func TestClientStructTreeValidatorRejectsGlobalCorruption(t *testing.T) {
 func TestClientStructTreeFullRemovalDetachesStorage(t *testing.T) {
 	values := make([]abstractStruct, 40)
 	for i := range values {
-		values[i] = &abstractStructBase{id: GenID(14, Number(i)), length: 1}
+		values[i] = &abstractStructBase{id: GenID(14, i), length: 1}
 	}
 	tree := newClientStructTreeFromFlat(values, 4, 3)
 	var leaves []*clientStructTreeLeaf
@@ -583,7 +583,7 @@ func BenchmarkClientStructTreeFindAndRemoveMiddle(b *testing.B) {
 			b.ReportAllocs()
 			values := make([]abstractStruct, count)
 			for i := range values {
-				values[i] = &abstractStructBase{id: GenID(21, Number(i)), length: 1}
+				values[i] = &abstractStructBase{id: GenID(21, i), length: 1}
 			}
 			batch := min(clientStructTreeRemovalsPerBuild, count/16)
 

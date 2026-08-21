@@ -193,7 +193,7 @@ func (t *clientStructTree) Find(clock Number) (clientStructTreeCursor, error) {
 	for leaf != nil {
 		index, err := findIndexSS(leaf.items[:leaf.used], clock)
 		if err == nil {
-			return t.cursorAt(leaf, int(index)), nil
+			return t.cursorAt(leaf, index), nil
 		}
 		leaf = leaf.next
 		if leaf == nil || leaf.used == 0 || leaf.items[0].getID().Clock > clock {

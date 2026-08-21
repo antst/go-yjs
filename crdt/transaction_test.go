@@ -239,7 +239,7 @@ func TestCompactDeleteSetPointerStoragePromotesWithoutLosingRanges(t *testing.T)
 	client := doc.ClientID
 
 	for i := 0; i < 3; i++ {
-		trans.addToDeleteSet(client, Number(i*2), 1)
+		trans.addToDeleteSet(client, i*2, 1)
 	}
 
 	deletes := trans.deleteSet.clients[client]
@@ -247,7 +247,7 @@ func TestCompactDeleteSetPointerStoragePromotesWithoutLosingRanges(t *testing.T)
 		t.Fatalf("delete ranges = %d, want 3", len(deletes))
 	}
 	for i, item := range deletes {
-		if item.clock != Number(i*2) || item.length != 1 {
+		if item.clock != i*2 || item.length != 1 {
 			t.Fatalf("delete range %d = {%d,%d}, want {%d,1}", i, item.clock, item.length, i*2)
 		}
 	}

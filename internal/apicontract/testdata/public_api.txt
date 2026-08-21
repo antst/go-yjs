@@ -187,7 +187,7 @@ crdt field Awareness.Observable *Observable
 crdt field Doc.AutoLoad bool
 crdt field Doc.ClientID Number
 crdt field Doc.GC bool
-crdt field Doc.Guid string
+crdt field Doc.GUID string
 crdt field Doc.Meta interface{}
 crdt field Doc.Observable *Observable
 crdt field Doc.ShouldLoad bool
@@ -328,10 +328,10 @@ crdt method Doc.Destroy ()
 crdt method Doc.Get (string, TypeConstructor) (SharedType, error)
 crdt method Doc.GetArray (string) *YArray
 crdt method Doc.GetMap (string) *YMap
-crdt method Doc.GetSubdocGuids () Set
+crdt method Doc.GetSubdocGUIDs () Set
 crdt method Doc.GetSubdocs () Set
 crdt method Doc.GetText (string) *YText
-crdt method Doc.GetXmlFragment (string) *YXmlFragment
+crdt method Doc.GetXMLFragment (string) *YXmlFragment
 crdt method Doc.Load ()
 crdt method Doc.Off (string, *ObserverHandler)
 crdt method Doc.OffUpdate (*ObserverHandler)
@@ -339,7 +339,7 @@ crdt method Doc.OffUpdateV2 (*ObserverHandler)
 crdt method Doc.On (string, *ObserverHandler)
 crdt method Doc.OnUpdate (func(update []byte, origin any)) *ObserverHandler
 crdt method Doc.OnUpdateV2 (func(update []byte, origin any)) *ObserverHandler
-crdt method Doc.ToJson () Object
+crdt method Doc.ToJSON () Object
 crdt method Doc.Transact (func(trans *Transaction), interface{})
 crdt method EventOperator.GetKind () EventOperatorKind
 crdt method EventOperator.HasAttributes () bool
@@ -416,7 +416,7 @@ crdt method YArray.Map (func(interface{}, Number, *YArray) interface{}) ArrayAny
 crdt method YArray.Push (ArrayAny)
 crdt method YArray.Splice (Number, Number) ArrayAny
 crdt method YArray.ToArray () ArrayAny
-crdt method YArray.ToJson () interface{}
+crdt method YArray.ToJSON () interface{}
 crdt method YArray.Unshift (ArrayAny)
 crdt method YEvent.GetChanges () Object
 crdt method YEvent.GetCurrentTarget () SharedType
@@ -436,7 +436,7 @@ crdt method YMap.Has (string) bool
 crdt method YMap.Keys () []string
 crdt method YMap.Range (func(key string, val interface{}))
 crdt method YMap.Set (string, interface{}) interface{}
-crdt method YMap.ToJson () interface{}
+crdt method YMap.ToJSON () interface{}
 crdt method YMap.Values () []interface{}
 crdt method YMapEvent.GetChanges () Object
 crdt method YText.ApplyDelta ([]EventOperator, bool)
@@ -451,7 +451,7 @@ crdt method YText.Length () Number
 crdt method YText.RemoveAttribute (string)
 crdt method YText.SetAttribute (string, interface{})
 crdt method YText.ToDelta (*Snapshot, *Snapshot, func(string, *ID) Object) []EventOperator
-crdt method YText.ToJson () interface{}
+crdt method YText.ToJSON () interface{}
 crdt method YText.ToString () string
 crdt method YTextEvent.GetDelta () []EventOperator
 crdt method YXmlElement.Clone () *YXmlElement
@@ -476,7 +476,7 @@ crdt method YXmlFragment.QuerySelector (string) SharedType
 crdt method YXmlFragment.QuerySelectorAll (string) []SharedType
 crdt method YXmlFragment.Slice (Number, Number) ArrayAny
 crdt method YXmlFragment.ToArray () ArrayAny
-crdt method YXmlFragment.ToJson () interface{}
+crdt method YXmlFragment.ToJSON () interface{}
 crdt method YXmlFragment.ToString () string
 crdt method YXmlFragment.Unshift (ArrayAny)
 crdt method YXmlText.Clone () *YXmlText
@@ -488,13 +488,12 @@ crdt method YXmlTreeWalker.Next () SharedType
 crdt method abstractType.GetLength () Number
 crdt method abstractType.Observe (func(interface{}, interface{}))
 crdt method abstractType.ObserveDeep (func(interface{}, interface{}))
-crdt method abstractType.ToJson () interface{}
 crdt method abstractType.Unobserve (func(interface{}, interface{}))
 crdt method abstractType.UnobserveDeep (func(interface{}, interface{}))
 crdt method abstractTypeBase.GetLength () Number
 crdt method abstractTypeBase.Observe (func(interface{}, interface{}))
 crdt method abstractTypeBase.ObserveDeep (func(interface{}, interface{}))
-crdt method abstractTypeBase.ToJson () interface{}
+crdt method abstractTypeBase.ToJSON () interface{}
 crdt method abstractTypeBase.Unobserve (func(interface{}, interface{}))
 crdt method abstractTypeBase.UnobserveDeep (func(interface{}, interface{}))
 crdt method clientStructCursor.Next () (clientStructCursor, bool)
@@ -559,10 +558,10 @@ crdt method xmlType.ToString () string
 crdt method yString.GetLength () Number
 crdt method yString.Observe (func(interface{}, interface{}))
 crdt method yString.ObserveDeep (func(interface{}, interface{}))
-crdt method yString.ToJson () interface{}
+crdt method yString.ToJSON () interface{}
 crdt method yString.Unobserve (func(interface{}, interface{}))
 crdt method yString.UnobserveDeep (func(interface{}, interface{}))
-crdt method yXmlHook.ToString () string
+crdt method yXMLHook.ToString () string
 crdt type AbsolutePosition struct
 crdt type ArrayAny = []any
 crdt type Awareness struct

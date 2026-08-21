@@ -63,7 +63,7 @@ import (
 // Go rounds allocs/op to an integer, so the displayed 0 allocs at 16:1 and 4:1 does
 // not mean no cache allocation — B/op is the honest column there.
 func benchKeysWriteRatio(b *testing.B, readsPerWrite int) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	for i := 0; i < 8; i++ {
 		_ = m.Keys() // prime; the cache arms on the second read
 	}
@@ -86,7 +86,7 @@ func BenchmarkMapKeysWritePerRead(b *testing.B)   { benchKeysWriteRatio(b, 1) }
 // The same interleaving without the read, so a reader can subtract the write's
 // own cost rather than attributing all of it to the cache.
 func benchMapWriteOnly(b *testing.B, readsPerWrite int) {
-	m := benchMap(perfSmall)
+	m := benchMap()
 	for i := 0; i < 8; i++ {
 		_ = m.Keys()
 	}
@@ -103,12 +103,12 @@ func BenchmarkMapWriteOnly16PerWrite(b *testing.B) { benchMapWriteOnly(b, 16) }
 func BenchmarkMapWriteOnly4PerWrite(b *testing.B)  { benchMapWriteOnly(b, 4) }
 func BenchmarkMapWriteOnlyPerRead(b *testing.B)    { benchMapWriteOnly(b, 1) }
 
-// ToJson carries the largest cached projection (196,936 B at 2,000 keys), so it
+// ToJSON carries the largest cached projection (196,936 B at 2,000 keys), so it
 // has the most to lose when a write invalidates it.
-func benchToJsonWriteRatio(b *testing.B, readsPerWrite int) {
-	m := benchMap(perfSmall)
+func benchToJSONWriteRatio(b *testing.B, readsPerWrite int) {
+	m := benchMap()
 	for i := 0; i < 16; i++ {
-		_ = m.ToJson() // the JSON cache arms after yMapEntriesCacheThreshold reads
+		_ = m.ToJSON() // the JSON cache arms after yMapEntriesCacheThreshold reads
 	}
 	benchReleaseSinks(b)
 	b.ReportAllocs()
@@ -117,13 +117,13 @@ func benchToJsonWriteRatio(b *testing.B, readsPerWrite int) {
 		if readsPerWrite > 0 && i%readsPerWrite == 0 {
 			m.Set(mapKey(i%perfSmall), i)
 		}
-		benchSinkAny = m.ToJson()
+		benchSinkAny = m.ToJSON()
 	}
 }
 
-func BenchmarkMapToJsonReadOnly(b *testing.B)       { benchToJsonWriteRatio(b, 0) }
-func BenchmarkMapToJsonRead16PerWrite(b *testing.B) { benchToJsonWriteRatio(b, 16) }
-func BenchmarkMapToJsonRead4PerWrite(b *testing.B)  { benchToJsonWriteRatio(b, 4) }
+func BenchmarkMapToJsonReadOnly(b *testing.B)       { benchToJSONWriteRatio(b, 0) }
+func BenchmarkMapToJsonRead16PerWrite(b *testing.B) { benchToJSONWriteRatio(b, 16) }
+func BenchmarkMapToJsonRead4PerWrite(b *testing.B)  { benchToJSONWriteRatio(b, 4) }
 
 // The uncached traversal, which is WHY the caches above exist and is worth
 // understanding before changing any of them. Real documents exceed

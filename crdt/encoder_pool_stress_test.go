@@ -62,7 +62,7 @@ func stressRounds() int {
 // buildStressDoc makes a document whose shape depends on `kind`, so different workers drive
 // different column encoders through the same pool.
 func buildStressDoc(kind, seed int) (*Doc, string) {
-	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(Number(seed%64+1)))
+	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(seed%64+1))
 	txt := doc.GetText("t")
 	arr := doc.GetArray("a")
 	m := doc.GetMap("m")
@@ -106,8 +106,8 @@ func buildStressDoc(kind, seed int) (*Doc, string) {
 func stressShape(doc *Doc) string {
 	shape := newObject()
 	shape.Set("t", doc.GetText("t").ToString())
-	shape.Set("a", doc.GetArray("a").ToJson())
-	shape.Set("m", doc.GetMap("m").ToJson())
+	shape.Set("a", doc.GetArray("a").ToJSON())
+	shape.Set("m", doc.GetMap("m").ToJSON())
 	cn, err := fuzzCanon(shape)
 	if err != nil {
 		return "ERR:" + err.Error()

@@ -28,7 +28,7 @@ func TestRootAttributeChangesPreserveIndependentReadCaches(t *testing.T) {
 		t.Fatalf("root attribute = %v, want en", got)
 	}
 
-	fragment := doc.GetXmlFragment("xml")
+	fragment := doc.GetXMLFragment("xml")
 	element := NewYXmlElement("p")
 	element.Insert(0, ArrayAny{"child"})
 	fragment.Insert(0, ArrayAny{element})
@@ -172,8 +172,8 @@ func TestPrimitiveMapOverwriteFastPathMatchesGenericEncoding(t *testing.T) {
 	fast.Set("k", "after-delete")
 	setPrimitiveMapThroughGenericIntegrate(t, genericDoc, generic, "k", "after-delete")
 
-	if !reflect.DeepEqual(fast.ToJson(), generic.ToJson()) {
-		t.Fatalf("map state differs: fast=%v generic=%v", fast.ToJson(), generic.ToJson())
+	if !reflect.DeepEqual(fast.ToJSON(), generic.ToJSON()) {
+		t.Fatalf("map state differs: fast=%v generic=%v", fast.ToJSON(), generic.ToJSON())
 	}
 	fastV1, err := EncodeStateAsUpdate(fastDoc, nil)
 	if err != nil {

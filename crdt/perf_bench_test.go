@@ -221,7 +221,8 @@ func BenchmarkMapSet(b *testing.B) {
 
 // ---------------------------------------------------------------- codec throughput
 
-func perfBuiltDoc(n int) *Doc {
+func perfBuiltDoc() *Doc {
+	n := perfLarge
 	doc := perfDoc()
 	txt := doc.GetText("t")
 	rng := perfRand()
@@ -236,7 +237,7 @@ func perfBuiltDoc(n int) *Doc {
 }
 
 func BenchmarkEncodeV1(b *testing.B) {
-	doc := perfBuiltDoc(perfLarge)
+	doc := perfBuiltDoc()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -247,7 +248,7 @@ func BenchmarkEncodeV1(b *testing.B) {
 }
 
 func BenchmarkEncodeV2(b *testing.B) {
-	doc := perfBuiltDoc(perfLarge)
+	doc := perfBuiltDoc()
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -259,7 +260,7 @@ func BenchmarkEncodeV2(b *testing.B) {
 
 func BenchmarkApplyV1(b *testing.B) {
 	benchReleaseSinks(b)
-	upd, err := EncodeStateAsUpdate(perfBuiltDoc(perfLarge), nil)
+	upd, err := EncodeStateAsUpdate(perfBuiltDoc(), nil)
 	if err != nil {
 		b.Fatal(err)
 	}
@@ -272,7 +273,7 @@ func BenchmarkApplyV1(b *testing.B) {
 
 func BenchmarkApplyV2(b *testing.B) {
 	benchReleaseSinks(b)
-	upd, err := EncodeStateAsUpdateV2(perfBuiltDoc(perfLarge), nil)
+	upd, err := EncodeStateAsUpdateV2(perfBuiltDoc(), nil)
 	if err != nil {
 		b.Fatal(err)
 	}

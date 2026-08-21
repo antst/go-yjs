@@ -121,8 +121,8 @@ func newLazyStructWriter(encoder updateEncoder) *lazyStructWriter {
 	}
 }
 
-func mergeUpdatesWith(updates [][]uint8, YDecoder func([]byte) updateDecoder, YEncoder func() updateEncoder) ([]uint8, error) {
-	return mergeUpdatesCore(updates, YDecoder, YEncoder)
+func mergeUpdatesWith(updates [][]uint8, yDecoder func([]byte) updateDecoder, yEncoder func() updateEncoder) ([]uint8, error) {
+	return mergeUpdatesCore(updates, yDecoder, yEncoder)
 }
 
 // MergeUpdates merges V1 updates into one canonical V1 update.
@@ -140,9 +140,9 @@ func MergeUpdatesV2(updates [][]byte) ([]byte, error) {
 // state vector (which would corrupt sync — the peer would believe it holds more
 // state than it does and skip structs it actually needs). The state vector is
 // emitted only after the reader is confirmed clean via reader.Err().
-func encodeStateVectorFromUpdateWith(update []uint8, YEncoder func() updateEncoder, YDecoder func([]byte) updateDecoder) ([]uint8, error) {
-	encoder := YEncoder()
-	updateDecoder := newLazyStructReader(YDecoder(update), false)
+func encodeStateVectorFromUpdateWith(update []uint8, yEncoder func() updateEncoder, yDecoder func([]byte) updateDecoder) ([]uint8, error) {
+	encoder := yEncoder()
+	updateDecoder := newLazyStructReader(yDecoder(update), false)
 	curr := updateDecoder.curr
 	if curr != nil {
 		size := 0
@@ -161,7 +161,6 @@ func encodeStateVectorFromUpdateWith(update []uint8, YEncoder func() updateEncod
 					// write what we have to the encoder
 					writeVarUint(encoder.restEncoder(), uint64(currClient))
 					writeVarUint(encoder.restEncoder(), uint64(currClock))
-
 				}
 
 				currClient = curr.getID().Client
@@ -244,11 +243,11 @@ func EncodeStateVectorFromUpdateV2(update []uint8) ([]uint8, error) {
 // parseUpdateMetaWith returns an error so a cap-breach / decode error in the
 // lazy reader surfaces instead of yielding SILENTLY-TRUNCATED from/to meta maps
 // (which would misreport the update's clock ranges on malicious input).
-func parseUpdateMetaWith(update []uint8, YDecoder func([]byte) updateDecoder) (map[Number]Number, map[Number]Number, error) {
+func parseUpdateMetaWith(update []uint8, yDecoder func([]byte) updateDecoder) (map[Number]Number, map[Number]Number, error) {
 	from := make(map[Number]Number)
 	to := make(map[Number]Number)
 
-	updateDecoder := newLazyStructReader(YDecoder(update), false)
+	updateDecoder := newLazyStructReader(yDecoder(update), false)
 	curr := updateDecoder.curr
 
 	if curr != nil {
@@ -370,7 +369,7 @@ func (h *lazyStructReaderHeap) Pop() interface{} {
 	return value
 }
 
-func mergeUpdatesCore(updates [][]uint8, YDecoder func([]byte) updateDecoder, YEncoder func() updateEncoder) ([]uint8, error) {
+func mergeUpdatesCore(updates [][]uint8, yDecoder func([]byte) updateDecoder, yEncoder func() updateEncoder) ([]uint8, error) {
 	// Strict decoding is always enforced now (the stopIfError flag and its
 	// panic-vs-error switch were removed): even a single update is run through the
 	// lazy struct reader so a malformed/DoS payload surfaces via its Err() instead
@@ -383,7 +382,7 @@ func mergeUpdatesCore(updates [][]uint8, YDecoder func([]byte) updateDecoder, YE
 	schedulerEntries := make([]lazyStructReaderHeapEntry, len(updates))
 	scheduler := make(lazyStructReaderHeap, 0, len(updates))
 	for i, update := range updates {
-		decoder := YDecoder(update)
+		decoder := yDecoder(update)
 		updateDecoders = append(updateDecoders, decoder)
 		reader := newLazyStructReader(decoder, true)
 		allReaders = append(allReaders, reader)
@@ -412,7 +411,7 @@ func mergeUpdatesCore(updates [][]uint8, YDecoder func([]byte) updateDecoder, YE
 	// Use the caller-supplied encoder factory so the merged output is emitted in
 	// the requested wire format. Hardcoding V1 here silently downgraded
 	// EncodeStateAsUpdateV2's pending-update merge path to V1.
-	updateEncoder := YEncoder()
+	updateEncoder := yEncoder()
 	// write structs lazily
 	lazyStructEncoder := newLazyStructWriter(updateEncoder)
 
@@ -458,7 +457,6 @@ func mergeUpdatesCore(updates [][]uint8, YDecoder func([]byte) updateDecoder, YE
 			for curr != nil &&
 				curr.getID().Clock+curr.structLength() <= currWrite.s.getID().Clock+currWrite.s.structLength() &&
 				curr.getID().Client >= currWrite.s.getID().Client {
-
 				curr = currDecoder.nextStruct()
 				iterated = true
 			}
@@ -666,7 +664,7 @@ func generateUpdate(lazyWriter *lazyStructWriter, maxUpdateSize int) []uint8 {
 	return updateEncoder.rest.Bytes()
 }
 
-func diffUpdatesWith(update []uint8, sv []uint8, YDecoder func([]byte) updateDecoder, YEncoder func() updateEncoder, maxUpdateSize int) ([][]uint8, error) {
+func diffUpdatesWith(update []uint8, sv []uint8, yDecoder func([]byte) updateDecoder, yEncoder func() updateEncoder, maxUpdateSize int) ([][]uint8, error) {
 	updates := make([][]uint8, 0)
 
 	if len(update) <= maxUpdateSize {
@@ -685,10 +683,10 @@ func diffUpdatesWith(update []uint8, sv []uint8, YDecoder func([]byte) updateDec
 	if err != nil {
 		return nil, fmt.Errorf("diff updates: decode state vector: %w", err)
 	}
-	encoder := YEncoder()
+	encoder := yEncoder()
 	lazyStructWriter := newLazyStructWriter(encoder)
 	lazyStructWriter.needRecordPosition = true
-	decoder := YDecoder(update)
+	decoder := yDecoder(update)
 	reader := newLazyStructReader(decoder, false)
 	for reader.curr != nil {
 		curr := reader.curr
@@ -742,7 +740,7 @@ func diffUpdatesWith(update []uint8, sv []uint8, YDecoder func([]byte) updateDec
 	return updates, nil
 }
 
-func diffUpdateWith(update []uint8, sv []uint8, YDecoder func([]byte) updateDecoder, YEncoder func() updateEncoder) ([]uint8, error) {
+func diffUpdateWith(update []uint8, sv []uint8, yDecoder func([]byte) updateDecoder, yEncoder func() updateEncoder) ([]uint8, error) {
 	// An empty/nil state vector means "the remote has nothing" — diff against the
 	// empty map (send everything). Normalize to the canonical [0]-client encoding
 	// (matching EncodeStateAsUpdateWith) so this legitimate case decodes cleanly,
@@ -754,9 +752,9 @@ func diffUpdateWith(update []uint8, sv []uint8, YDecoder func([]byte) updateDeco
 	if err != nil {
 		return nil, fmt.Errorf("diff update: decode state vector: %w", err)
 	}
-	encoder := YEncoder()
+	encoder := yEncoder()
 	lazyStructWriter := newLazyStructWriter(encoder)
-	decoder := YDecoder(update)
+	decoder := yDecoder(update)
 	reader := newLazyStructReader(decoder, false)
 
 	for reader.curr != nil {
@@ -1127,7 +1125,7 @@ func newObfuscator(opts *obfuscatorOptions) func(abstractStruct) (abstractStruct
 				case *YXmlElement:
 					tp.NodeName = cached(nodeNameCache, tp.NodeName,
 						func() string { return fmt.Sprintf("node-%d", i) })
-				case *yXmlHook:
+				case *yXMLHook:
 					tp.hookName = cached(nodeNameCache, tp.hookName,
 						func() string { return fmt.Sprintf("hook-%d", i) })
 				}
@@ -1142,7 +1140,7 @@ func newObfuscator(opts *obfuscatorOptions) func(abstractStruct) (abstractStruct
 			if opts.subdocs {
 				c.opts = newObject()
 				if c.doc != nil {
-					c.doc.Guid = fmt.Sprint(i)
+					c.doc.GUID = fmt.Sprint(i)
 				}
 			}
 		case *contentEmbed:

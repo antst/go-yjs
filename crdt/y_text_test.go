@@ -424,9 +424,7 @@ func TestApplyDeltaDeleteCurrAttributesPersist(t *testing.T) {
 	tx.Format(2, 1, it)
 
 	bt := func() Object { o := newObject(); o.Set("bold", true); return o }
-	ret := func(n int, attr Object) EventOperator {
-		return NewRetainDeltaOp(n, attr)
-	}
+	ret := NewRetainDeltaOp
 	bn := newObject()
 	bn.Set("bold", Null)
 	tx.ApplyDelta([]EventOperator{
@@ -493,7 +491,7 @@ func TestRemoteConcurrentFormatXmlTextCleanup(t *testing.T) {
 	mk := func(cid Number) (*Doc, *YText, *YXmlText) {
 		d := newDoc("g", false, nil, nil, false, WithClientID(cid))
 		txt := d.GetText("T")
-		frag := d.GetXmlFragment("F")
+		frag := d.GetXMLFragment("F")
 		xt := NewYXmlText()
 		frag.Insert(0, ArrayAny{xt})
 		return d, txt, xt
@@ -507,7 +505,7 @@ func TestRemoteConcurrentFormatXmlTextCleanup(t *testing.T) {
 	base, _ := EncodeStateAsUpdate(d1, nil)
 	_ = ApplyUpdate(d2, base, "remote")
 	t2 := d2.GetText("T")
-	x2 := d2.GetXmlFragment("F").Get(0).(*YXmlText)
+	x2 := d2.GetXMLFragment("F").Get(0).(*YXmlText)
 
 	// concurrent identical bold format on both peers
 	t1.Format(0, 2, bold())
@@ -932,7 +930,7 @@ func TestYTextStringCacheInvalidatesOnLocalAndRemoteChanges(t *testing.T) {
 
 func TestYXmlTextStringCacheInvalidates(t *testing.T) {
 	doc := newDoc("xml-text-cache", false, defaultGCFilter, nil, false, WithClientID(1))
-	fragment := doc.GetXmlFragment("f")
+	fragment := doc.GetXMLFragment("f")
 	text := NewYXmlText()
 	fragment.Insert(0, ArrayAny{text})
 	text.Insert(0, "abcd", newObject())

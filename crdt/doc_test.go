@@ -68,7 +68,7 @@ func TestResolvingAnExistingTypeDoesNotAllocate(t *testing.T) {
 	doc.GetMap("m")
 	doc.GetArray("a")
 	doc.GetText("t")
-	doc.GetXmlFragment("x")
+	doc.GetXMLFragment("x")
 
 	for _, tc := range []struct {
 		name string
@@ -77,7 +77,7 @@ func TestResolvingAnExistingTypeDoesNotAllocate(t *testing.T) {
 		{"GetMap", func() { doc.GetMap("m") }},
 		{"GetArray", func() { doc.GetArray("a") }},
 		{"GetText", func() { doc.GetText("t") }},
-		{"GetXmlFragment", func() { doc.GetXmlFragment("x") }},
+		{"GetXMLFragment", func() { doc.GetXMLFragment("x") }},
 		{"getGeneric", func() { doc.getGeneric("m") }},
 	} {
 		if allocs := testing.AllocsPerRun(200, tc.get); allocs != 0 {
@@ -193,7 +193,7 @@ func TestApplyingAMapDocumentStaysWithinItsAllocationBudget(t *testing.T) {
 //
 // FIX: newDoc initializes SubDocs = NewSet(), so the Add is safe. A nil Set and
 // an empty Set behave identically for every SubDocs READ (range in GetSubdocs /
-// GetSubdocGuids / Destroy, and Delete) — only Add differs (nil panics) — so the
+// GetSubdocGUIDs / Destroy, and Delete) — only Add differs (nil panics) — so the
 // initialization changes nothing except removing the panic.
 //
 // This test FAILS (panics) on the unpatched tree and PASSES after the fix.
@@ -268,8 +268,8 @@ func TestNewDocInitializesSubDocs(t *testing.T) {
 	if got := doc.GetSubdocs(); len(got) != 0 {
 		t.Fatalf("GetSubdocs on a fresh Doc should be empty, got %d", len(got))
 	}
-	if got := doc.GetSubdocGuids(); len(got) != 0 {
-		t.Fatalf("GetSubdocGuids on a fresh Doc should be empty, got %d", len(got))
+	if got := doc.GetSubdocGUIDs(); len(got) != 0 {
+		t.Fatalf("GetSubdocGUIDs on a fresh Doc should be empty, got %d", len(got))
 	}
 	// And Add no longer panics.
 	func() {

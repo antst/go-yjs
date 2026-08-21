@@ -44,7 +44,8 @@ func TestReviewH_AccumOverflow_ApplyUpdate(t *testing.T) {
 	// then created at GenID(client, negativeClock).
 	var clientEnc [binary.MaxVarintLen64]byte
 	cn := binary.PutUvarint(clientEnc[:], clientVal)
-	poison := []byte{0x01, 0x03} // numClients=1, numStructs=3
+	poison := make([]byte, 0, 8)
+	poison = append(poison, 0x01, 0x03) // numClients=1, numStructs=3
 	poison = append(poison, clientEnc[:cn]...)
 	poison = append(poison, 0x00) // block clock 0
 	poison = append(poison, gc()...)

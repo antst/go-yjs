@@ -84,8 +84,8 @@ func TestContentDocCopyUsesOptsSnapshot(t *testing.T) {
 	if cp.doc.ShouldLoad != cp.doc.AutoLoad {
 		t.Errorf("ShouldLoad=%v, want == AutoLoad=%v (createDocFromOpts parity)", cp.doc.ShouldLoad, cp.doc.AutoLoad)
 	}
-	if cp.doc.Guid != "sub-guid" {
-		t.Errorf("Guid = %q, want preserved", cp.doc.Guid)
+	if cp.doc.GUID != "sub-guid" {
+		t.Errorf("GUID = %q, want preserved", cp.doc.GUID)
 	}
 }
 
@@ -244,7 +244,7 @@ func TestPrelimFlushIsDeterministic(t *testing.T) {
 		el.SetAttribute("a", "1")
 		el.SetAttribute("b", "2")
 		el.SetAttribute("c", "3")
-		d.GetXmlFragment("x").Insert(0, ArrayAny{el})
+		d.GetXMLFragment("x").Insert(0, ArrayAny{el})
 	}); got != 1 {
 		t.Errorf("Y.XmlElement prelim attrs produced %d distinct byte streams across 40 identical builds, want 1", got)
 	}
@@ -566,7 +566,7 @@ func TestRelativePositionOnNonMapRootDoesNotPanic(t *testing.T) {
 	}{
 		{"text", func(d *Doc) abstractType { return d.GetText("t") }},
 		{"array", func(d *Doc) abstractType { return d.GetArray("a") }},
-		{"xmlfragment", func(d *Doc) abstractType { return d.GetXmlFragment("x") }},
+		{"xmlfragment", func(d *Doc) abstractType { return d.GetXMLFragment("x") }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
@@ -601,9 +601,9 @@ func TestRelativePositionOnNonMapRootDoesNotPanic(t *testing.T) {
 // yjs@13.6.31 querySelector / querySelectorAll / YXmlTreeWalker).
 func TestXmlTreeWalkerAndSelectors(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	if frag == nil {
-		t.Fatal("GetXmlFragment did not yield *YXmlFragment")
+		t.Fatal("GetXMLFragment did not yield *YXmlFragment")
 	}
 
 	//   <div><p/><span/></div><p/>
@@ -668,7 +668,7 @@ func TestXmlTreeWalkerAndSelectors(t *testing.T) {
 // entirely — silent data loss in a read path (FR-014).
 func TestXmlToStringRendersEveryChildKind(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 
 	frag.Insert(0, ArrayAny{NewYXmlElement("b")})
 	frag.Insert(1, ArrayAny{"plain"})
@@ -686,7 +686,7 @@ func TestXmlToStringRendersEveryChildKind(t *testing.T) {
 // where the reference produces "1,2,3" (FR-014b).
 func TestXmlBinaryAttributeRendering(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	el := NewYXmlElement("div")
 	frag.Insert(0, ArrayAny{el})
 	el.SetAttribute("data", []uint8{1, 2, 3})
@@ -775,7 +775,7 @@ func TestSnapshotCrossFormatDecodeMatchesReference(t *testing.T) {
 // no matches.
 func TestXmlTreeWalkerTraversalAndSelectors(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("f")
+	frag := doc.GetXMLFragment("f")
 
 	outer := NewYXmlElement("div")
 	inner := NewYXmlElement("span")

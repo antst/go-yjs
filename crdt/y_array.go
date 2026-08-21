@@ -2,7 +2,7 @@ package crdt
 
 import "sync/atomic"
 
-// Event that describes the changes on a YArray
+// YArrayEvent describes the changes on a YArray.
 type YArrayEvent struct {
 	YEvent
 	YTrans *Transaction
@@ -17,14 +17,14 @@ func newYArrayEvent(yarray *YArray, trans *Transaction) *YArrayEvent {
 	return y
 }
 
-// A shared Array implementation.
+// YArray is a shared Array implementation.
 type YArray struct {
 	abstractTypeBase
 	prelimContent ArrayAny
 	readIndex     atomic.Pointer[listReadIndex]
 }
 
-// Construct a new YArray containing the specified items.
+// From constructs a new YArray containing the specified items.
 func (y *YArray) From(items ArrayAny) *YArray {
 	a := NewYArray()
 	a.Push(items)
@@ -82,7 +82,7 @@ func (y *YArray) callObserver(trans *Transaction, parentSubs ChangedSubs) {
 	}
 }
 
-// Inserts new content at an index.
+// Insert inserts new content at an index.
 //
 // Important: This function expects an array of content. Not just a content
 // object. The reason for this "weirdness" is that inserting several elements
@@ -97,7 +97,7 @@ func (y *YArray) Insert(index Number, content ArrayAny) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeListInsertGenerics(trans, y, index, content)
-		}, nil, true)
+		})
 	} else {
 		spliceArray(&y.prelimContent, index, 0, content)
 	}
@@ -111,52 +111,55 @@ func (y *YArray) Push(content ArrayAny) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeListPushGenerics(trans, y, content)
-		}, nil, true)
+		})
 	} else {
 		y.prelimContent = append(y.prelimContent, content...)
 	}
 }
 
-// Preppends content to this YArray.
+// Unshift prepends content to this YArray.
 func (y *YArray) Unshift(content ArrayAny) {
 	y.Insert(0, content)
 }
 
-// Deletes elements starting from an index.
+// Delete deletes elements starting from an index.
 func (y *YArray) Delete(index, length Number) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeListDelete(trans, y, index, length)
-		}, nil, true)
+		})
 	} else {
 		spliceArray(&y.prelimContent, index, length, nil)
 	}
 }
 
-// Returns the i-th element from a YArray.
+// Get returns the i-th element from a YArray.
 func (y *YArray) Get(index Number) interface{} {
 	return typeListGet(y, index)
 }
 
-// Transforms this YArray to a JavaScript Array.
+// ToArray transforms this YArray to a JavaScript Array.
 func (y *YArray) ToArray() ArrayAny {
 	return typeListToArray(y)
 }
 
-// Transforms this YArray to a JavaScript Array.
+// Splice removes deleteCount elements at index and inserts content in their
+// place, mirroring JavaScript's Array.prototype.splice.
 func (y *YArray) Splice(start, end Number) ArrayAny {
 	return typeListSlice(y, start, end)
 }
 
 // Transforms this Shared Type to a JSON object.
-func (y *YArray) ToJson() interface{} {
+func (y *YArray) toJSONValue() interface{} { return y.ToJSON() }
+
+func (y *YArray) ToJSON() interface{} {
 	result := make(ArrayAny, 0, y.GetLength())
 	for item := y.start; item != nil; item = item.right {
 		if item.countable() && !item.isDeleted() {
 			content := item.content.contentValues()
 			for _, value := range content {
 				if shared, ok := value.(abstractType); ok {
-					result = append(result, shared.ToJson())
+					result = append(result, shared.toJSONValue())
 				} else {
 					result = append(result, value)
 				}
@@ -166,7 +169,7 @@ func (y *YArray) ToJson() interface{} {
 	return result
 }
 
-// Returns an Array with the result of calling a provided function on every
+// Map returns an Array with the result of calling a provided function on every
 // element of this YArray.
 func (y *YArray) Map(f func(interface{}, Number, *YArray) interface{}) ArrayAny {
 	if item := y.start; item != nil && item.right == nil && !item.isDeleted() && item.countable() {
@@ -183,7 +186,7 @@ func (y *YArray) Map(f func(interface{}, Number, *YArray) interface{}) ArrayAny 
 	})
 }
 
-// Executes a provided function on once on overy element of this YArray.
+// ForEach executes a provided function once on every element of this YArray.
 func (y *YArray) ForEach(f func(interface{}, Number, *YArray)) {
 	if item := y.start; item != nil && item.right == nil && !item.isDeleted() && item.countable() {
 		if content, ok := item.content.(*contentAny); ok {

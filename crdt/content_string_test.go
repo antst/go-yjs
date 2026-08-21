@@ -451,7 +451,7 @@ func TestContentStringUTF16IndexThresholdAndSplitPreservation(t *testing.T) {
 		t.Fatal("short non-ASCII string retained a sampled index")
 	}
 
-	const runes = int(contentStringUTF16IndexThreshold * 3)
+	const runes = contentStringUTF16IndexThreshold * 3
 	content := newContentString(strings.Repeat("界", runes))
 	length := content.contentLength()
 	splitAt := contentStringUTF16IndexThreshold + 32
@@ -460,10 +460,10 @@ func TestContentStringUTF16IndexThresholdAndSplitPreservation(t *testing.T) {
 	if index == nil || right.utf16Index != index {
 		t.Fatalf("long split did not share its sampled index: left=%p right=%p", index, right.utf16Index)
 	}
-	if got, want := content.value, strings.Repeat("界", int(splitAt)); got != want {
+	if got, want := content.value, strings.Repeat("界", splitAt); got != want {
 		t.Fatalf("indexed left = %q, want %q", got, want)
 	}
-	if got, want := right.value, strings.Repeat("界", runes-int(splitAt)); got != want {
+	if got, want := right.value, strings.Repeat("界", runes-splitAt); got != want {
 		t.Fatalf("indexed right = %q, want %q", got, want)
 	}
 	if got := right.contentLength(); got != length-splitAt {

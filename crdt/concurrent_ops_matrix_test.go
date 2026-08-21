@@ -119,7 +119,7 @@ var writeOps = []struct {
 		}
 	}},
 	{"XmlSetAttribute", func(d *Doc, s int) {
-		if f := d.GetXmlFragment("x"); f != nil && f.GetLength() > 0 {
+		if f := d.GetXMLFragment("x"); f != nil && f.GetLength() > 0 {
 			if el, ok := f.Get(0).(*YXmlElement); ok {
 				el.SetAttribute("id", strconv.Itoa(s%50))
 			}
@@ -147,11 +147,11 @@ var readOps = []struct {
 	fn   func(doc *Doc) string
 }{
 	{"TextToString", func(d *Doc) string { return d.GetText("t").ToString() }},
-	{"TextToJson", func(d *Doc) string { return canonOf(d.GetText("t").ToJson()) }},
+	{"TextToJson", func(d *Doc) string { return canonOf(d.GetText("t").ToJSON()) }},
 	{"TextToDelta", func(d *Doc) string { return deltaSemantic(d.GetText("t").ToDelta(nil, nil, nil)) }},
 	{"TextGetAttributes", func(d *Doc) string { return canonOf(d.GetText("t").GetAttributes(nil)) }},
 	{"ArrayToArray", func(d *Doc) string { return canonOf(d.GetArray("a").ToArray()) }},
-	{"ArrayToJson", func(d *Doc) string { return canonOf(d.GetArray("a").ToJson()) }},
+	{"ArrayToJson", func(d *Doc) string { return canonOf(d.GetArray("a").ToJSON()) }},
 	{"ArrayForEach", func(d *Doc) string {
 		n := 0
 		d.GetArray("a").ForEach(func(interface{}, Number, *YArray) { n++ })
@@ -185,15 +185,15 @@ var readOps = []struct {
 	{"MapKeys", func(d *Doc) string { return fmt.Sprintf("%d", len(d.GetMap("m").Keys())) }},
 	{"MapValues", func(d *Doc) string { return fmt.Sprintf("%d", len(d.GetMap("m").Values())) }},
 	{"MapEntries", func(d *Doc) string { return fmt.Sprintf("%d", len(d.GetMap("m").Entries())) }},
-	{"MapToJson", func(d *Doc) string { return canonOf(d.GetMap("m").ToJson()) }},
+	{"MapToJson", func(d *Doc) string { return canonOf(d.GetMap("m").ToJSON()) }},
 	{"MapGetSize", func(d *Doc) string { return strconv.Itoa(d.GetMap("m").GetSize()) }},
 	{"MapHas", func(d *Doc) string { return fmt.Sprintf("%v", d.GetMap("m").Has("k1")) }},
-	{"XmlToString", func(d *Doc) string { return d.GetXmlFragment("x").ToString() }},
+	{"XmlToString", func(d *Doc) string { return d.GetXMLFragment("x").ToString() }},
 	{"XmlQuerySelectorAll", func(d *Doc) string {
-		return strconv.Itoa(len(d.GetXmlFragment("x").QuerySelectorAll("div")))
+		return strconv.Itoa(len(d.GetXMLFragment("x").QuerySelectorAll("div")))
 	}},
 	{"XmlTreeWalker", func(d *Doc) string {
-		w := d.GetXmlFragment("x").CreateTreeWalker(func(SharedType) bool { return true })
+		w := d.GetXMLFragment("x").CreateTreeWalker(func(SharedType) bool { return true })
 		n := 0
 		for x := w.Next(); x != nil; x = w.Next() {
 			n++
@@ -232,7 +232,7 @@ func canonOf(v interface{}) string {
 }
 
 func buildMatrixDoc(client int) *Doc {
-	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(Number(client)))
+	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(client))
 	txt := doc.GetText("t")
 	txt.Insert(0, "seed text for the matrix", Object{})
 	a := newObject()
@@ -240,7 +240,7 @@ func buildMatrixDoc(client int) *Doc {
 	txt.Format(0, 4, a)
 	arr := doc.GetArray("a")
 	m := doc.GetMap("m")
-	f := doc.GetXmlFragment("x")
+	f := doc.GetXMLFragment("x")
 	for i := 0; i < 12; i++ {
 		arr.Insert(arr.GetLength(), ArrayAny{i})
 		m.Set(fmt.Sprintf("k%d", i), i)
@@ -316,7 +316,7 @@ func TestConcurrentAllWritesIndependentDocs(t *testing.T) {
 				mu.Unlock()
 				return
 			}
-			fresh := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(Number(900+w)))
+			fresh := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(900+w))
 			_ = ApplyUpdateV2(fresh, enc, nil)
 			if got, want := fresh.GetText("t").ToString(), doc.GetText("t").ToString(); got != want {
 				mu.Lock()

@@ -11,6 +11,7 @@ import (
 )
 
 // ---------------------------------------------------------------- from y_xml_element.go
+
 // jsNumberToString renders a float64 the way ECMAScript Number::toString(10) does,
 // so XML attribute/embed string coercion matches yjs (empty-string-plus-value). JS
 // uses fixed notation for 1e-6 <= |x| < 1e21 and exponential (with a leading-zero-free
@@ -261,7 +262,7 @@ func (y *YXmlElement) RemoveAttribute(attributeName string) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			typeMapDelete(trans, y, attributeName)
-		}, nil, true)
+		})
 	} else {
 		delete(y.prelimAttrs, attributeName)
 	}
@@ -272,7 +273,7 @@ func (y *YXmlElement) SetAttribute(attributeName string, attributeValue interfac
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeMapSet(trans, y, attributeName, attributeValue)
-		}, nil, true)
+		})
 	} else {
 		if y.prelimAttrs == nil {
 			y.prelimAttrs = make(map[string]interface{})
@@ -297,7 +298,7 @@ func (y *YXmlElement) GetAttributes() Object {
 }
 
 func (y *YXmlElement) writeType(encoder updateEncoder) {
-	encoder.writeTypeRef(yXmlElementRefID)
+	encoder.writeTypeRef(yXMLElementRefID)
 	if err := encoder.writeKey(y.NodeName); err != nil {
 		// Unreachable: every updateEncoder writes into a bytes.Buffer, whose Write
 		// never returns an error. writeType cannot report one, so silently emitting
@@ -315,6 +316,7 @@ func NewYXmlElement(nodeName string) *YXmlElement {
 }
 
 // ---------------------------------------------------------------- from y_xml_event.go
+
 // YXmlEvent An Event that describes changes on a YXml Element or Yxml Fragment
 type YXmlEvent struct {
 	YEvent
@@ -369,7 +371,7 @@ func newYXmlEvent(target abstractType, subs ChangedSubs, trans *Transaction) *YX
  * Can be created with {@link YXmlFragment#createTreeWalker}
  *
  * @public
- * @implements {Iterable<YXmlElement|YXmlText|YXmlElement|yXmlHook>}
+ * @implements {Iterable<YXmlElement|YXmlText|YXmlElement|yXMLHook>}
  */
 
 // YXmlTreeWalker is a depth-first walker over an XML subtree, faithful to yjs's YXmlTreeWalker
@@ -390,14 +392,14 @@ type xmlType interface {
 type YXmlFragment struct {
 	abstractTypeBase
 	prelimContent ArrayAny
-	sliceCache    atomic.Pointer[yXmlSliceCache]
+	sliceCache    atomic.Pointer[yXMLSliceCache]
 	slicePrimed   atomic.Bool
 	readIndex     atomic.Pointer[listReadIndex]
 }
 
-const maxCachedXmlSliceLength = 4096
+const maxCachedXMLSliceLength = 4096
 
-type yXmlSliceCache struct {
+type yXMLSliceCache struct {
 	values ArrayAny
 }
 
@@ -530,7 +532,7 @@ func (y *YXmlFragment) callObserver(trans *Transaction, parentSubs ChangedSubs) 
 	}
 }
 
-// Get the string representation of all the children of this YXmlFragment.
+// ToString returns the string representation of all the children of this YXmlFragment.
 func (y *YXmlFragment) ToString() string {
 	var builder strings.Builder
 	// The benchmark tree averages roughly forty bytes per child. Grow is only a
@@ -580,7 +582,9 @@ func appendXMLValue(builder *strings.Builder, value any) {
 	}
 }
 
-func (y *YXmlFragment) ToJson() interface{} {
+func (y *YXmlFragment) toJSONValue() interface{} { return y.ToJSON() }
+
+func (y *YXmlFragment) ToJSON() interface{} {
 	return y.ToString()
 }
 
@@ -597,13 +601,13 @@ func (y *YXmlFragment) Insert(index Number, content ArrayAny) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeListInsertGenerics(trans, y, index, content)
-		}, nil, true)
+		})
 	} else {
 		spliceArray(&y.prelimContent, index, 0, content)
 	}
 }
 
-// Inserts new content at an index.
+// InsertAfter inserts new content after the given reference item.
 //
 // @example
 //
@@ -618,7 +622,7 @@ func (y *YXmlFragment) InsertAfter(ref SharedType, content ArrayAny) {
 			}
 
 			_ = typeListInsertGenericsAfter(trans, y, refItem, content)
-		}, nil, true)
+		})
 	} else {
 		index := 0
 
@@ -641,20 +645,20 @@ func (y *YXmlFragment) InsertAfter(ref SharedType, content ArrayAny) {
 	}
 }
 
-// Deletes elements starting from an index.
+// Delete deletes elements starting from an index.
 // Default: length = 1
 func (y *YXmlFragment) Delete(index, length Number) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			_ = typeListDelete(trans, y, index, length)
-		}, nil, true)
+		})
 	} else {
 		// @ts-ignore _prelimContent is defined because this is not yet integrated
 		spliceArray(&y.prelimContent, index, length, nil)
 	}
 }
 
-// Transforms this YArray to a JavaScript Array.
+// ToArray transforms this YXmlFragment's children into a Go slice.
 func (y *YXmlFragment) ToArray() ArrayAny {
 	return typeListToArray(y)
 }
@@ -670,17 +674,17 @@ func (y *YXmlFragment) Push(content ArrayAny) {
 	y.Insert(y.length, content)
 }
 
-// Preppends content to this YArray.
+// Unshift prepends content to this YXmlFragment.
 func (y *YXmlFragment) Unshift(content ArrayAny) {
 	y.Insert(0, content)
 }
 
-// Returns the i-th element from a YArray.
+// Get returns the i-th child of this YXmlFragment.
 func (y *YXmlFragment) Get(index Number) interface{} {
 	return typeListGet(y, index)
 }
 
-// Transforms this YArray to a JavaScript Array.
+// Slice returns the children in [start, end) as a Go slice.
 // Default: start = 0
 func (y *YXmlFragment) Slice(start, end Number) ArrayAny {
 	length := y.GetLength()
@@ -699,14 +703,14 @@ func (y *YXmlFragment) Slice(start, end Number) ArrayAny {
 			normalizedEnd = minNumber(normalizedEnd, len(cached.values))
 			return slices.Clone(cached.values[normalizedStart:normalizedEnd])
 		}
-		if y.doc != nil && y.doc.readCacheEnabled && length > 0 && length <= maxCachedXmlSliceLength &&
+		if y.doc != nil && y.doc.readCacheEnabled && length > 0 && length <= maxCachedXMLSliceLength &&
 			y.slicePrimed.CompareAndSwap(true, false) {
 			values := typeListToArray(y)
-			y.sliceCache.Store(&yXmlSliceCache{values: values})
+			y.sliceCache.Store(&yXMLSliceCache{values: values})
 			normalizedEnd = minNumber(normalizedEnd, len(values))
 			return slices.Clone(values[normalizedStart:normalizedEnd])
 		}
-		if y.doc != nil && y.doc.readCacheEnabled && length > 0 && length <= maxCachedXmlSliceLength {
+		if y.doc != nil && y.doc.readCacheEnabled && length > 0 && length <= maxCachedXMLSliceLength {
 			y.slicePrimed.Store(true)
 		}
 	}
@@ -720,7 +724,7 @@ func (y *YXmlFragment) Slice(start, end Number) ArrayAny {
 //
 // @param {UpdateEncoderV1 | UpdateEncoderV2} encoder The encoder to write data to.
 func (y *YXmlFragment) writeType(encoder updateEncoder) {
-	encoder.writeTypeRef(yXmlFragmentRefID)
+	encoder.writeTypeRef(yXMLFragmentRefID)
 }
 
 func NewYXmlFragment() *YXmlFragment {
@@ -735,7 +739,7 @@ func newYXmlFragmentType() SharedType {
 	return NewYXmlFragment()
 }
 
-// not supported yet.
+// NewYXmlTreeWalker is not supported yet.
 func NewYXmlTreeWalker(root SharedType, f func(SharedType) bool) *YXmlTreeWalker {
 	if root == nil {
 		return nil
@@ -782,7 +786,7 @@ func (w *YXmlTreeWalker) next(filter func(abstractType) bool) abstractType {
 	if n != nil && (!w.firstCall || n.isDeleted() || !filter(contentTypeOf(n))) {
 		for {
 			t := contentTypeOf(n)
-			if !n.isDeleted() && isXmlContainer(t) && t.startItem() != nil {
+			if !n.isDeleted() && isXMLContainer(t) && t.startItem() != nil {
 				n = t.startItem() // walk DOWN
 			} else {
 				for n != nil { // walk RIGHT, else UP
@@ -827,9 +831,9 @@ func contentTypeOf(item *itemStruct) abstractType {
 	return ct.value
 }
 
-// isXmlContainer reports whether a type can hold children, matching yjs's
+// isXMLContainer reports whether a type can hold children, matching yjs's
 // `type.constructor === YXmlElement || type.constructor === YXmlFragment`.
-func isXmlContainer(t abstractType) bool {
+func isXMLContainer(t abstractType) bool {
 	switch t.(type) {
 	case *YXmlElement, *YXmlFragment:
 		return true
@@ -838,23 +842,24 @@ func isXmlContainer(t abstractType) bool {
 }
 
 // ---------------------------------------------------------------- from y_xml_hook.go
+
 // embeddedYMap keeps YMap's method promotion without exposing a field on this
 // package-private reference-only shared type.
 type embeddedYMap = YMap
 
-// You can manage binding to a custom type with yXmlHook.
-type yXmlHook struct {
+// You can manage binding to a custom type with yXMLHook.
+type yXMLHook struct {
 	embeddedYMap
 	hookName string
 }
 
 // copyType Creates an Item with the same effect as this Item (without position effect)
-func (y *yXmlHook) copyType() abstractType {
+func (y *yXMLHook) copyType() abstractType {
 	return newYXmlHook(y.hookName)
 }
 
 // cloneType
-func (y *yXmlHook) cloneType() abstractType {
+func (y *yXMLHook) cloneType() abstractType {
 	el := newYXmlHook(y.hookName)
 	y.ForEach(func(key string, value interface{}, yMap *YMap) {
 		el.Set(key, value)
@@ -862,12 +867,12 @@ func (y *yXmlHook) cloneType() abstractType {
 	return el
 }
 
-// ToString makes yXmlHook satisfy xmlType so it renders inside a parent
-// fragment/element. yjs yXmlHook has no toString override (it extends YMap), so
+// ToString makes yXMLHook satisfy xmlType so it renders inside a parent
+// fragment/element. yjs yXMLHook has no toString override (it extends YMap), so
 // JS string coercion yields the default "[object Object]" (verified: a hook child
 // of <div> renders "<div>[object Object]</div>"). Without this the xmlType
 // assertion in YXmlFragment.ToString failed and the hook child was dropped ("").
-func (y *yXmlHook) ToString() string {
+func (y *yXMLHook) ToString() string {
 	return "[object Object]"
 }
 
@@ -875,16 +880,16 @@ func (y *yXmlHook) ToString() string {
 // BinaryEncoder.
 //
 // This is called when this Item is sent to a remote peer.
-func (y *yXmlHook) writeType(encoder updateEncoder) {
-	encoder.writeTypeRef(yXmlHookRefID)
+func (y *yXMLHook) writeType(encoder updateEncoder) {
+	encoder.writeTypeRef(yXMLHookRefID)
 	if err := encoder.writeKey(y.hookName); err != nil {
 		// Unreachable for the same reason as YXmlElement.writeType above.
 		panic("y-crdt: encoding an XML hook name failed: " + err.Error())
 	}
 }
 
-func newYXmlHook(hookName string) *yXmlHook {
-	h := &yXmlHook{
+func newYXmlHook(hookName string) *yXMLHook {
+	h := &yXMLHook{
 		embeddedYMap: *NewYMap(nil),
 		hookName:     hookName,
 	}
@@ -892,6 +897,7 @@ func newYXmlHook(hookName string) *yXmlHook {
 }
 
 // ---------------------------------------------------------------- from y_xml_text.go
+
 // YXmlText Represents text in a Dom Element. In the future this type will also handle
 // simple formatting information like bold and italic.
 type YXmlText struct {
@@ -1059,12 +1065,15 @@ func (y *YXmlText) appendFormattedXMLTo(builder *strings.Builder) {
 	}
 }
 
+// toJSONValue boxes the XML string; YXmlText.ToJSON keeps Yjs's string return.
+func (y *YXmlText) toJSONValue() interface{} { return y.ToJSON() }
+
 func (y *YXmlText) ToJSON() string {
 	return y.ToString()
 }
 
 func (y *YXmlText) writeType(encoder updateEncoder) {
-	encoder.writeTypeRef(yXmlTextRefID)
+	encoder.writeTypeRef(yXMLTextRefID)
 }
 
 func NewYXmlText() *YXmlText {

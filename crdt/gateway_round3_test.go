@@ -2,9 +2,9 @@ package crdt
 
 import "testing"
 
-// MAX-gateway finding: Doc.GetSubdocGuids cast each SubDocs entry to string, but
+// MAX-gateway finding: Doc.GetSubdocGUIDs cast each SubDocs entry to string, but
 // SubDocs holds *Doc (added in cleanupTransactions, read as *Doc in Destroy/GetSubdocs).
-// yjs getSubdocGuids maps each subdoc to its .guid. Teeth: pre-fix this panics
+// yjs getSubdocGUIDs maps each subdoc to its .guid. Teeth: pre-fix this panics
 // ("interface conversion: ... is *Doc, not string") on any doc that has a subdoc.
 func TestGetSubdocGuidsReturnsGuids(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
@@ -12,12 +12,12 @@ func TestGetSubdocGuidsReturnsGuids(t *testing.T) {
 	m.Set("a", newDoc("guid-a", false, defaultGCFilter, nil, false))
 	m.Set("b", newDoc("guid-b", false, defaultGCFilter, nil, false))
 
-	guids := doc.GetSubdocGuids() // pre-fix: panics here
+	guids := doc.GetSubdocGUIDs() // pre-fix: panics here
 	if len(guids) != 2 {
-		t.Fatalf("GetSubdocGuids returned %d guids, want 2: %v", len(guids), guids)
+		t.Fatalf("GetSubdocGUIDs returned %d guids, want 2: %v", len(guids), guids)
 	}
 	if !guids.Has("guid-a") || !guids.Has("guid-b") {
-		t.Errorf("GetSubdocGuids = %v, want {guid-a, guid-b}", guids)
+		t.Errorf("GetSubdocGUIDs = %v, want {guid-a, guid-b}", guids)
 	}
 }
 

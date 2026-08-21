@@ -14,7 +14,7 @@ func xmlElementNames(values ArrayAny) []string {
 
 func TestYXmlSliceCacheIsolatedAndInvalidated(t *testing.T) {
 	doc := newDoc("xml-slice-cache", false, defaultGCFilter, nil, false, WithClientID(1))
-	fragment := doc.GetXmlFragment("x")
+	fragment := doc.GetXMLFragment("x")
 	fragment.Insert(0, ArrayAny{NewYXmlElement("a"), NewYXmlElement("b"), NewYXmlElement("c")})
 
 	_ = fragment.Slice(0, 2)
@@ -45,7 +45,7 @@ func TestYXmlSliceCacheIsolatedAndInvalidated(t *testing.T) {
 		t.Fatal(err)
 	}
 	_ = ApplyUpdateV2(replica, update, nil)
-	remote := replica.GetXmlFragment("x")
+	remote := replica.GetXMLFragment("x")
 	_, _ = remote.Slice(0, remote.GetLength()), remote.Slice(0, remote.GetLength())
 	if remote.sliceCache.Load() == nil {
 		t.Fatal("remote fixture did not populate the slice cache")

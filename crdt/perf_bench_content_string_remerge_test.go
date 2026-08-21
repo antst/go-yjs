@@ -123,11 +123,11 @@ func benchContentStringPositionDelete(
 		}
 	}
 	b.StopTimer()
-	if got, want := lastText.Length(), Number(runes/2)*unitLength; got != want {
+	if got, want := lastText.Length(), runes/2*unitLength; got != want {
 		b.Fatalf("length after deletes = %d, want %d", got, want)
 	}
 	deletedItems, deletedLength, maxDeletedLength := contentStringDeletedRunStats(lastText)
-	if want := Number(runes/2) * unitLength; deletedLength != want {
+	if want := runes / 2 * unitLength; deletedLength != want {
 		b.Fatalf("deleted length = %d, want %d", deletedLength, want)
 	}
 	if position == contentStringDeleteMiddle &&

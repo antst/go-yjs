@@ -50,7 +50,7 @@ func TestEveryBuiltinTypeUsesTheCounterFastPath(t *testing.T) {
 		{"YArray", doc.GetArray("a")},
 		{"YText", doc.GetText("t")},
 		{"YMap", doc.GetMap("m")},
-		{"YXmlFragment", doc.GetXmlFragment("x")},
+		{"YXmlFragment", doc.GetXMLFragment("x")},
 		{"YXmlElement", NewYXmlElement("div")},
 		{"YXmlText", NewYXmlText()},
 	}
@@ -69,37 +69,37 @@ func TestItemCountNeverDriftsUnderMixedOps(t *testing.T) {
 		doc := newDoc("g", gc, defaultGCFilter, nil, false, WithClientID(1))
 		arr := doc.GetArray("a")
 		txt := doc.GetText("t")
-		f := doc.GetXmlFragment("x")
+		f := doc.GetXMLFragment("x")
 		rng := markerLCG(uint32(seed*2654435761 + 101))
 		um := newUndoManager(arr, 500, func(_ *itemStruct) bool { return true }, defaultTrackedOrigins())
 
 		step := func(i int) {
 			switch rng(11) {
 			case 0:
-				arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+				arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 			case 1:
 				if arr.GetLength() > 1 {
-					arr.Delete(Number(rng(arr.GetLength()-1)), 1)
+					arr.Delete(rng(arr.GetLength()-1), 1)
 				}
 			case 2: // large single insert then a split: the density case that broke char-sizing
 				txt.Insert(0, "0123456789012345678901234567890123456789", Object{})
 			case 3:
 				if txt.Length() > 4 {
-					txt.Insert(Number(1+rng(txt.Length()-2)), "s", Object{})
+					txt.Insert(1+rng(txt.Length()-2), "s", Object{})
 				}
 			case 4:
 				if txt.Length() > 4 {
-					txt.Delete(Number(rng(txt.Length()-2)), 2)
+					txt.Delete(rng(txt.Length()-2), 2)
 				}
 			case 5:
 				nested := NewYMap(nil)
 				nested.Set("k", i)
-				arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{nested})
+				arr.Insert(rng(arr.GetLength()+1), ArrayAny{nested})
 			case 6:
-				f.Insert(Number(rng(f.GetLength()+1)), ArrayAny{NewYXmlElement("div")})
+				f.Insert(rng(f.GetLength()+1), ArrayAny{NewYXmlElement("div")})
 			case 7:
 				if f.GetLength() > 1 {
-					f.Delete(Number(rng(f.GetLength()-1)), 1)
+					f.Delete(rng(f.GetLength()-1), 1)
 				}
 			case 8: // batched: merges happen at cleanup, inside one transaction
 				Transact(doc, func(*Transaction) {
@@ -131,7 +131,7 @@ func TestItemCountNeverDriftsUnderMixedOps(t *testing.T) {
 		_ = ApplyUpdateV2(peer, enc, nil)
 		assertCount(t, peer.GetArray("a"), fmt.Sprintf("seed %d decoded arr", seed))
 		assertCount(t, peer.GetText("t"), fmt.Sprintf("seed %d decoded txt", seed))
-		assertCount(t, peer.GetXmlFragment("x"), fmt.Sprintf("seed %d decoded xml", seed))
+		assertCount(t, peer.GetXMLFragment("x"), fmt.Sprintf("seed %d decoded xml", seed))
 
 		// Lazy root adoption: the root is materialised AFTER the update landed, so the counter must
 		// be reconstructed rather than left at zero.

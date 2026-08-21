@@ -2,6 +2,7 @@ package protocol
 
 import (
 	"bytes"
+	"errors"
 	"testing"
 
 	"github.com/antst/go-yjs/crdt"
@@ -198,7 +199,7 @@ func TestDecodeAwarenessMessageTruncated(t *testing.T) {
 	// report a real decode error (anything other than ErrEmptyAwareness).
 	if _, _, err := DecodeAwarenessMessage([]byte{0x80}); err == nil {
 		t.Fatalf("expected error decoding truncated-count payload, got nil")
-	} else if err == ErrEmptyAwareness {
+	} else if errors.Is(err, ErrEmptyAwareness) {
 		t.Fatalf("truncated count must not be misclassified as ErrEmptyAwareness")
 	}
 
@@ -303,7 +304,7 @@ func TestDecodeAwarenessMessageNonObjectState(t *testing.T) {
 
 	// Non-object JSON values must be rejected.
 	for _, bad := range []string{`"a string"`, `[1,2,3]`, `42`, `true`} {
-		if _, _, err := DecodeAwarenessMessage(encode(bad)); err != ErrMalformedAwarenessState {
+		if _, _, err := DecodeAwarenessMessage(encode(bad)); !errors.Is(err, ErrMalformedAwarenessState) {
 			t.Errorf("state %s: want ErrMalformedAwarenessState, got %v", bad, err)
 		}
 	}

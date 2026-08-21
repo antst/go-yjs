@@ -82,7 +82,7 @@ func inspectPayload(msgType uint8, payload []byte, frameLength int) (inspectedMe
 		subType, err := readVarUintView(payload, &offset)
 		if err != nil {
 			if errors.Is(err, errVarUintOverflow) {
-				return inspectedMessage{}, fmt.Errorf("%w: %v", ErrInvalidSyncMessageType, err)
+				return inspectedMessage{}, fmt.Errorf("%w: %w", ErrInvalidSyncMessageType, err)
 			}
 			return inspectedMessage{}, fmt.Errorf("protocol: read sync sub-message type: %w", err)
 		}

@@ -16,7 +16,7 @@ import (
 // any consumer wanting to diff two documents, and so the differential tests in this package and the
 // gate share one definition instead of two that can drift.
 //
-// Both sides must produce byte-identical canonical output: values are projected through ToJson (a
+// Both sides must produce byte-identical canonical output: values are projected through ToJSON (a
 // nested type is a live object with parent back-pointers), keys are sorted by the canonicaliser, and
 // probe keys/queries are FIXED so the two implementations ask the same questions.
 
@@ -30,7 +30,7 @@ var (
 // projectReadValue renders a read value the way the JS side's `proj` does.
 func projectReadValue(v interface{}) interface{} {
 	if t, ok := v.(abstractType); ok && t != nil {
-		return t.ToJson()
+		return t.toJSONValue()
 	}
 	if v == nil {
 		return Null
@@ -43,7 +43,7 @@ func readsArray(a *YArray) Object {
 	o := newObject()
 	length := a.GetLength()
 	o.Set("len", length)
-	o.Set("toJSON", a.ToJson())
+	o.Set("toJSON", a.ToJSON())
 
 	arr := a.ToArray()
 	projected := make(ArrayAny, 0, len(arr))
@@ -75,7 +75,7 @@ func readsArray(a *YArray) Object {
 func readsMap(m *YMap) Object {
 	o := newObject()
 	o.Set("size", m.GetSize())
-	o.Set("toJSON", m.ToJson())
+	o.Set("toJSON", m.ToJSON())
 
 	keys := m.Keys()
 	sort.Strings(keys)
@@ -135,7 +135,7 @@ func readsXML(x *YXmlFragment) Object {
 	length := x.GetLength()
 	o.Set("len", length)
 	o.Set("toString", x.ToString())
-	o.Set("toJSON", x.ToJson())
+	o.Set("toJSON", x.ToJSON())
 
 	toArray := make(ArrayAny, 0, length)
 	for _, n := range x.ToArray() {
@@ -193,7 +193,7 @@ func readsXML(x *YXmlFragment) Object {
 func readsText(t *YText) Object {
 	o := newObject()
 	o.Set("toString", t.ToString())
-	o.Set("toJSON", t.ToJson())
+	o.Set("toJSON", t.ToJSON())
 	o.Set("toDelta", deltaReadShape(t.ToDelta(nil, nil, nil)))
 
 	attrs := t.GetAttributes(nil)

@@ -86,13 +86,13 @@ func iterateDeletedStructs(trans *Transaction, ds *deleteSet, f func(s abstractS
 	// Insertion order, not Go map order. The reference iterates a JS Map here, and undo
 	// restoration order is observable, so a randomised walk made the result vary between runs of
 	// the same input (research R1).
-	for _, clientId := range ds.orderedClients() {
-		deletes := ds.clients[clientId]
+	for _, clientID := range ds.orderedClients() {
+		deletes := ds.clients[clientID]
 		// The delete set can name a client absent from the store (e.g. a crafted
-		// snapshot/update). store.Clients[clientId] is then nil and len(*ss) derefs
+		// snapshot/update). store.Clients[clientID] is then nil and len(*ss) derefs
 		// -> SIGSEGV; comma-ok before the deref (an absent client has nothing to
 		// iterate). Routed through the shared clientStructs accessor (F#5/H#4).
-		ss, ok := trans.doc.store.clientStructs(clientId)
+		ss, ok := trans.doc.store.clientStructs(clientID)
 		if !ok || ss.Len() == 0 {
 			continue
 		}
