@@ -895,7 +895,7 @@ func TestNativeXmlDiff(t *testing.T) {
 		}
 		total++
 		doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-		frag := doc.GetXmlFragment("f")
+		frag := doc.GetXMLFragment("f")
 		func() {
 			defer func() {
 				if r := recover(); r != nil {

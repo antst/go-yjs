@@ -470,7 +470,7 @@ func TestV2DeleteSetVsJS(t *testing.T) {
 	// payload. Apply it and confirm the resulting document length is correct,
 	// which exercises the V2 DS decode end-to-end.
 	fx := getFixture(t, "delete_only")
-	doc := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+	doc := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 	_ = ApplyUpdateV2(doc, b64dec(t, fx.UpdateV2), nil)
 	// original had 8 items, deleted 2+2 => 4 remain
 	if got := doc.GetArray("a").GetLength(); got != 4 {
@@ -484,7 +484,7 @@ func TestV2DeleteOnlyUpdate(t *testing.T) {
 	fx := getFixture(t, "delete_only")
 
 	// base doc loaded from the V1 full state (applied via the V1 decoder).
-	base := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+	base := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 	_ = ApplyUpdate(base, b64dec(t, fx.UpdateV1), nil)
 	if got := base.GetArray("a").GetLength(); got != 4 {
 		t.Errorf("base delete_only: want 4 got %d", got)
@@ -494,7 +494,7 @@ func TestV2DeleteOnlyUpdate(t *testing.T) {
 	if fx.DeleteDiffV2 == "" {
 		t.Skip("fixture lacks deleteDiffV2")
 	}
-	doc := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+	doc := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 	_ = ApplyUpdateV2(doc, b64dec(t, fx.DeleteDiffV2), nil)
 	// applying only the delete diff (no inserts) to an empty doc leaves nothing
 	// to delete, but must not panic and must leave an empty/consistent array.

@@ -29,7 +29,7 @@ func lazyIDArenaFixture(t *testing.T) ([][]byte, [][]byte, []byte, []byte, *Snap
 	partsV2 := make([][]byte, 3)
 	combined := newDoc("combined", false, defaultGCFilter, nil, false, WithClientID(999))
 	for part := range partsV1 {
-		doc := newDoc("part", false, defaultGCFilter, nil, false, WithClientID(Number(part+1)))
+		doc := newDoc("part", false, defaultGCFilter, nil, false, WithClientID(part+1))
 		text := doc.GetText("t")
 		state := uint32(part + 1)
 		for i := 0; i < 256; i++ {
@@ -166,7 +166,7 @@ func TestLazyIDArenaAllocatesFreshMaxSizedBlocks(t *testing.T) {
 
 	var firstAtMax *ID
 	for range lazyIDArenaMax * 3 {
-		id := decoder.allocID(Number(-decoder.idArenaPos), Number(-decoder.idArenaPos+1000))
+		id := decoder.allocID(-decoder.idArenaPos, -decoder.idArenaPos+1000)
 		used := -decoder.idArenaPos - 1
 		if len(decoder.idArena) == lazyIDArenaMax && used == 1 {
 			firstAtMax = id

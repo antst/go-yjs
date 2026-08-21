@@ -23,7 +23,7 @@ type yMapJSONCache struct {
 	value Object
 }
 
-// Event that describes the changes on a YMap.
+// YMapEvent describes the changes on a YMap.
 type YMapEvent struct {
 	YEvent
 	KeysChanged ChangedSubs
@@ -36,7 +36,7 @@ func newYMapEvent(ymap *YMap, trans *Transaction, subs ChangedSubs) *YMapEvent {
 	}
 }
 
-// A shared Map implementation.
+// YMap is a shared Map implementation.
 type YMap struct {
 	abstractTypeBase
 	prelimContent map[string]interface{}
@@ -148,7 +148,9 @@ func (y *YMap) callObserver(trans *Transaction, parentSubs ChangedSubs) {
 }
 
 // Transforms this Shared Type to a JSON object.
-func (y *YMap) ToJson() interface{} {
+func (y *YMap) toJSONValue() interface{} { return y.ToJSON() }
+
+func (y *YMap) ToJSON() interface{} {
 	if cached := y.jsonCache.Load(); cached != nil {
 		return cached.value.ShallowClone()
 	}
@@ -160,12 +162,12 @@ func (y *YMap) ToJson() interface{} {
 			t, ok := v.(abstractType)
 			if ok {
 				cacheable = false
-				m.Set(key, t.ToJson())
+				m.Set(key, t.toJSONValue())
 			} else {
 				if _, undefined := v.(UndefinedType); !undefined {
 					m.Set(key, v)
 				} else {
-					// ToJson omits undefined-valued keys while Keys and Entries retain them. Such
+					// ToJSON omits undefined-valued keys while Keys and Entries retain them. Such
 					// a projection cannot safely serve all three read APIs.
 					cacheable = false
 				}
@@ -173,7 +175,7 @@ func (y *YMap) ToJson() interface{} {
 		}
 	}
 	// A 2k-entry ordered Object retains about 192 KiB. Build it only for a sustained primitive-map
-	// read pattern and cap its width. Nested shared types are deliberately excluded: their ToJson
+	// read pattern and cap its width. Nested shared types are deliberately excluded: their ToJSON
 	// result is newly materialised and may be mutated by a caller, so a shallow cached clone would
 	// let that nested mutation poison later reads. The JSON and Entries projections are mutually
 	// exclusive; together with Keys this bounds retained map read state to roughly one projection.
@@ -188,7 +190,7 @@ func (y *YMap) ToJson() interface{} {
 	return m
 }
 
-// Returns the size of the YMap (count of key/value pairs)
+// GetSize returns the size of the YMap (count of key/value pairs).
 func (y *YMap) GetSize() Number {
 	if y.doc == nil {
 		return len(y.prelimContent)
@@ -196,7 +198,7 @@ func (y *YMap) GetSize() Number {
 	return y.size
 }
 
-// Returns the keys for each element in the YMap Type.
+// Keys returns the keys for each element in the YMap Type.
 func (y *YMap) Keys() []string {
 	if cached := y.jsonCache.Load(); cached != nil {
 		return objectKeysClone(cached.value)
@@ -249,7 +251,7 @@ func (y *YMap) AppendKeys(dst []string) []string {
 	return dst
 }
 
-// Returns the values for each element in the YMap Type.
+// Values returns the values for each element in the YMap Type.
 func (y *YMap) Values() []interface{} {
 	values := make([]interface{}, 0, len(y.typeMap))
 	for _, item := range y.typeMap {
@@ -260,7 +262,7 @@ func (y *YMap) Values() []interface{} {
 	return values
 }
 
-// Returns an Iterator of [key, value] pairs
+// Entries returns an iterator of [key, value] pairs.
 func (y *YMap) Entries() map[string]interface{} {
 	if cached := y.jsonCache.Load(); cached != nil {
 		return objectMapClone(cached.value)
@@ -323,7 +325,7 @@ func objectMapClone(object Object) map[string]interface{} {
 	return maps.Clone(object.d.large.m)
 }
 
-// Executes a provided function on once on every key-value pair.
+// ForEach executes a provided function once on every key-value pair.
 func (y *YMap) ForEach(f func(string, interface{}, *YMap)) Object {
 	m := newObject()
 	for key, item := range y.typeMap {
@@ -341,18 +343,18 @@ func (y *YMap) Range(f func(key string, val interface{})) {
 	}
 }
 
-// Remove a specified element from this YMap.
+// Delete removes a specified element from this YMap.
 func (y *YMap) Delete(key string) {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
 			typeMapDelete(trans, y, key)
-		}, nil, true)
+		})
 	} else {
 		delete(y.prelimContent, key)
 	}
 }
 
-// Adds or updates an element with a specified key and value.
+// Set adds or updates an element with a specified key and value.
 func (y *YMap) Set(key string, value interface{}) interface{} {
 	if y.doc != nil {
 		trans, initialCall := beginTransact(y.doc, nil, true, true)
@@ -407,7 +409,7 @@ func (y *YMap) setFreshPrimitiveKnown(trans *Transaction, key string, value inte
 	}
 }
 
-// Returns a specified element from this YMap.
+// Get returns a specified element from this YMap.
 func (y *YMap) Get(key string) interface{} {
 	return typeMapGet(y, key)
 }
@@ -434,7 +436,7 @@ func (y *YMap) bulkClearPrimitive(trans *Transaction) {
 	y.size = 0
 }
 
-// Removes all elements from this YMap.
+// Clear removes all elements from this YMap.
 func (y *YMap) Clear() {
 	if y.doc != nil {
 		transactMutation(y.doc, func(trans *Transaction) {
@@ -453,7 +455,7 @@ func (y *YMap) Clear() {
 					item.deleteItemStruct(trans)
 				}
 			}
-		}, nil, true)
+		})
 	} else {
 		y.prelimContent = make(map[string]interface{})
 	}

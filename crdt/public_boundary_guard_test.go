@@ -13,7 +13,7 @@ import (
 )
 
 func TestSharedTypeBoundaryRemainsSealed(t *testing.T) {
-	_, file := parseProductionFileDeclaring(t, "SharedType")
+	file := parseProductionFileDeclaring(t, "SharedType")
 	for _, declaration := range file.Decls {
 		gen, ok := declaration.(*ast.GenDecl)
 		if !ok {

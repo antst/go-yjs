@@ -43,7 +43,7 @@ func TestSearchMarkersSurviveDeferredItemMerges(t *testing.T) {
 		for i := 0; i < 128; i++ {
 			array.Insert(array.GetLength(), ArrayAny{i})
 			if i > 2 {
-				_ = findMarker(array, i/2)
+				findMarker(array, i/2)
 			}
 		}
 	}, nil)
@@ -157,7 +157,7 @@ func TestScaledMarkerTextMatchesModel(t *testing.T) {
 	for len(model) < target {
 		idx := rng(len(model) + 1)
 		ch := letters[rng(len(letters))]
-		txt.Insert(Number(idx), string(ch), Object{})
+		txt.Insert(idx, string(ch), Object{})
 		model = append(model, 0)
 		copy(model[idx+1:], model[idx:])
 		model[idx] = ch
@@ -187,12 +187,12 @@ func TestScaledMarkerTextMatchesModel(t *testing.T) {
 			if idx+n > len(model) {
 				n = len(model) - idx
 			}
-			txt.Delete(Number(idx), Number(n))
+			txt.Delete(idx, n)
 			model = append(model[:idx], model[idx+n:]...)
 		} else {
 			idx := rng(len(model) + 1)
 			ch := letters[rng(len(letters))]
-			txt.Insert(Number(idx), string(ch), Object{})
+			txt.Insert(idx, string(ch), Object{})
 			model = append(model, 0)
 			copy(model[idx+1:], model[idx:])
 			model[idx] = ch
@@ -241,7 +241,7 @@ func TestScaledMarkerArrayMatchesModel(t *testing.T) {
 	for len(model) < target {
 		idx := rng(len(model) + 1)
 		v := rng(1 << 20)
-		arr.Insert(Number(idx), ArrayAny{v})
+		arr.Insert(idx, ArrayAny{v})
 		model = append(model, 0)
 		copy(model[idx+1:], model[idx:])
 		model[idx] = v
@@ -260,19 +260,19 @@ func TestScaledMarkerArrayMatchesModel(t *testing.T) {
 	for i := 0; i < ops; i++ {
 		if rng(3) == 0 && len(model) > 16_500 {
 			idx := rng(len(model))
-			arr.Delete(Number(idx), 1)
+			arr.Delete(idx, 1)
 			model = append(model[:idx], model[idx+1:]...)
 		} else {
 			idx := rng(len(model) + 1)
 			v := rng(1 << 20)
-			arr.Insert(Number(idx), ArrayAny{v})
+			arr.Insert(idx, ArrayAny{v})
 			model = append(model, 0)
 			copy(model[idx+1:], model[idx:])
 			model[idx] = v
 		}
 	}
 
-	if arr.GetLength() != Number(len(model)) {
+	if arr.GetLength() != len(model) {
 		t.Fatalf("array length = %d, model %d", arr.GetLength(), len(model))
 	}
 	// Compare every element, not a checksum: a checksum over a permutation of the same values would
@@ -299,7 +299,7 @@ func TestScaledMarkerArrayMatchesModel(t *testing.T) {
 	fresh := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(2))
 	_ = ApplyUpdateV2(fresh, enc, nil)
 	rtArr := fresh.GetArray("a")
-	if rtArr.GetLength() != Number(len(model)) {
+	if rtArr.GetLength() != len(model) {
 		t.Fatalf("round-trip array length = %d, model %d", rtArr.GetLength(), len(model))
 	}
 	rt := rtArr.ToArray()
@@ -335,15 +335,15 @@ func TestScaledMarkerShrinkThenReuse(t *testing.T) {
 	// marker cache while those nodes exist, then let cleanup merge the pieces back into one. This
 	// reaches the retained-cache state directly in the unit the schedule actually uses: Items.
 	Transact(doc, func(trans *Transaction) {
-		for clock := Number(1); clock < Number(len(model)); clock++ {
+		for clock := Number(1); clock < len(model); clock++ {
 			if getItemCleanStart(trans, GenID(doc.ClientID, clock)) == nil {
 				t.Fatalf("failed to split at clock %d", clock)
 			}
 		}
-		if items := assertLinkedItemCount(t, txt); items != Number(len(model)) {
+		if items := assertLinkedItemCount(t, txt); items != len(model) {
 			t.Fatalf("split fixture has %d Items, want %d", items, len(model))
 		}
-		for index := Number(125); index < Number(len(model)); index += 125 {
+		for index := Number(125); index < len(model); index += 125 {
 			findMarker(txt, index)
 		}
 	}, nil, true)
@@ -369,12 +369,12 @@ func TestScaledMarkerShrinkThenReuse(t *testing.T) {
 	for i := 0; i < 4_000; i++ {
 		if rng(3) == 0 && len(model) > 0 {
 			idx := rng(len(model))
-			txt.Delete(Number(idx), 1)
+			txt.Delete(idx, 1)
 			model = append(model[:idx], model[idx+1:]...)
 		} else {
 			idx := rng(len(model) + 1)
 			ch := letters[rng(len(letters))]
-			txt.Insert(Number(idx), string(ch), Object{})
+			txt.Insert(idx, string(ch), Object{})
 			model = append(model, 0)
 			copy(model[idx+1:], model[idx:])
 			model[idx] = ch

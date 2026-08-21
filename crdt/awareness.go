@@ -8,6 +8,7 @@ import (
 )
 
 // ---------------------------------------------------------------- from awareness.go
+
 // ErrMalformedAwarenessState is returned by ApplyAwarenessUpdate /
 // applyAwarenessUpdateWithoutEvents when a client entry's state payload is valid JSON but
 // not a JSON object (a string / array / number / bool). The Awareness state map
@@ -159,13 +160,14 @@ func (a *Awareness) setLocalState(state Object, force bool) error {
 	var updated []Number
 	var filteredUpdated []Number
 	var removed []Number
-	if ownedState.IsNil() {
+	switch {
+	case ownedState.IsNil():
 		removed = append(removed, clientID)
-	} else if prevState.IsNil() {
+	case prevState.IsNil():
 		// if state != nil {
 		added = append(added, clientID)
 		// }
-	} else {
+	default:
 		updated = append(updated, clientID)
 		// Mirror y-protocols setLocalState exactly:
 		//   if (!f.equalityDeep(prevState, state)) { filteredUpdated.push(clientID) }
@@ -261,7 +263,8 @@ func NewAwareness(doc *Doc) *Awareness {
 	return aw
 }
 
-// Mark (remote) clients as inactive and remove them from the list of active peers.
+// RemoveAwarenessStates marks (remote) clients as inactive and removes them from
+// the list of active peers.
 // This change will be propagated to remote clients.
 func RemoveAwarenessStates(awareness *Awareness, clients []Number, origin interface{}) {
 	var added []Number
@@ -349,7 +352,8 @@ func EncodeAwarenessUpdate(awareness *Awareness, clients []Number, states map[Nu
 	return encoder.Bytes()
 }
 
-// Modify the content of an awareness update before re-encoding it to an awareness update.
+// ModifyAwarenessUpdate modifies the content of an awareness update before
+// re-encoding it to an awareness update.
 //
 // This might be useful when you have a central server that wants to ensure that clients
 // cant hijack somebody elses identity.
@@ -422,31 +426,6 @@ type awarenessEntry struct {
 	state    Object
 }
 
-// decodeAwarenessEntries decodes and validates EVERY per-client entry of an
-// awareness update WITHOUT touching any Awareness state. It is the single
-// decode/validate pass that makes ApplyAwarenessUpdate / applyAwarenessUpdateWithoutEvents
-// all-or-nothing: if any entry is truncated (ReadString fails) or carries a
-// non-object state, it returns an error and the caller mutates nothing.
-//
-//   - A truncated entry (ReadString error) → ErrTruncatedAwarenessFrame (wrapping
-//     the cause). Discarding that error would leave the state string empty,
-//     jsonObject("") nil, and the entry misread as a CLEARED state — silently
-//     deleting/overwriting existing state on hostile input.
-//   - A state payload that is valid JSON but not an object → ErrMalformedAwarenessState
-//     (the state map holds Object values; an unchecked assertion would panic).
-//
-// A truncated leading count varint yields length 0 here (ReadVarUint returns 0 on
-// a short read), i.e. an empty entry list and a no-op apply — matching the prior
-// behavior for that case.
-//
-// The leading count varint is attacker-controlled (up to math.MaxUint64). Before
-// make()-ing the entries slice with it as capacity, bound it against the bytes
-// that actually remain: every entry is VarUint(clientID) + VarUint(clock) +
-// VarString(state), i.e. at least 3 bytes, so a count greater than the remaining
-// byte budget is provably malformed and would otherwise trigger a `makeslice: cap
-// out of range` panic or an unbounded allocation (remote DoS via the public
-// ApplyAwarenessUpdate / applyAwarenessUpdateWithoutEvents API). Reject it as a truncated
-// frame. Mirrors readArrayDepth / ReadArray (decoding.go) and the V2 ReadArray fix.
 // ParseAwarenessStateJSON classifies an awareness entry's state JSON string into
 // either a cleared state (the zero Object) or a populated state Object, with
 // identical empty/null/object handling for BOTH the core decode path
@@ -493,6 +472,31 @@ func ParseAwarenessStateJSON(data string) (Object, error) {
 	}
 }
 
+// decodeAwarenessEntries decodes and validates EVERY per-client entry of an
+// awareness update WITHOUT touching any Awareness state. It is the single
+// decode/validate pass that makes ApplyAwarenessUpdate / applyAwarenessUpdateWithoutEvents
+// all-or-nothing: if any entry is truncated (ReadString fails) or carries a
+// non-object state, it returns an error and the caller mutates nothing.
+//
+//   - A truncated entry (ReadString error) → ErrTruncatedAwarenessFrame (wrapping
+//     the cause). Discarding that error would leave the state string empty,
+//     jsonObject("") nil, and the entry misread as a CLEARED state — silently
+//     deleting/overwriting existing state on hostile input.
+//   - A state payload that is valid JSON but not an object → ErrMalformedAwarenessState
+//     (the state map holds Object values; an unchecked assertion would panic).
+//
+// A truncated leading count varint yields length 0 here (ReadVarUint returns 0 on
+// a short read), i.e. an empty entry list and a no-op apply — matching the prior
+// behavior for that case.
+//
+// The leading count varint is attacker-controlled (up to math.MaxUint64). Before
+// make()-ing the entries slice with it as capacity, bound it against the bytes
+// that actually remain: every entry is VarUint(clientID) + VarUint(clock) +
+// VarString(state), i.e. at least 3 bytes, so a count greater than the remaining
+// byte budget is provably malformed and would otherwise trigger a `makeslice: cap
+// out of range` panic or an unbounded allocation (remote DoS via the public
+// ApplyAwarenessUpdate / applyAwarenessUpdateWithoutEvents API). Reject it as a truncated
+// frame. Mirrors readArrayDepth / ReadArray (decoding.go) and the V2 ReadArray fix.
 func decodeAwarenessEntries(update []byte) ([]awarenessEntry, error) {
 	decoder := newDecoder(update)
 	length, err := readVarUint(decoder)
@@ -561,53 +565,54 @@ func decodeAwarenessEntries(update []byte) ([]awarenessEntry, error) {
 // observers may re-enter the awareness API. Centralizing this removes the
 // hand-duplicated loop the two entry points carried, where a future clock/LWW fix
 // could land in one and silently miss the other (DRY, Principle VII).
-func (awareness *Awareness) applyAwarenessEntries(entries []awarenessEntry, timestamp int64) (added, updated, filteredUpdated, removed []Number) {
-	awareness.mu.Lock()
-	if awareness.destroyed {
+func (a *Awareness) applyAwarenessEntries(entries []awarenessEntry, timestamp int64) (added, updated, filteredUpdated, removed []Number) {
+	a.mu.Lock()
+	if a.destroyed {
 		// No-op after teardown, uniform with setLocalState / RemoveAwarenessStates: an
 		// update applied to a destroyed awareness must not re-populate its maps.
-		awareness.mu.Unlock()
+		a.mu.Unlock()
 		return nil, nil, nil, nil
 	}
-	defer awareness.mu.Unlock()
+	defer a.mu.Unlock()
 	for _, e := range entries {
 		clientID := e.clientID
 		clock := e.clock
 		state := e.state
 
-		clientMeta := awareness.meta[clientID]
-		prevState := awareness.states[clientID]
+		clientMeta := a.meta[clientID]
+		prevState := a.states[clientID]
 
 		currClock := 0
 		if !clientMeta.IsNil() {
 			currClock = clientMeta.GetOr("clock").(Number)
 		}
 
-		_, exist := awareness.states[clientID]
+		_, exist := a.states[clientID]
 		if currClock < clock || (currClock == clock && state.IsNil() && exist) {
 			if state.IsNil() {
 				// never let a remote client remove this local state
-				if clientID == awareness.ClientID && !awareness.states[awareness.ClientID].IsNil() {
+				if clientID == a.ClientID && !a.states[a.ClientID].IsNil() {
 					// remote client removed the local state. Do not remote state. Broadcast a message indicating
 					// that this client still exists by increasing the clock
 					clock++
 				} else {
-					delete(awareness.states, clientID)
+					delete(a.states, clientID)
 				}
 			} else {
-				awareness.states[clientID] = state
+				a.states[clientID] = state
 			}
 
-			awareness.meta[clientID] = MakeObject(
+			a.meta[clientID] = MakeObject(
 				"clock", clock,
 				"lastUpdated", timestamp,
 			)
 
-			if clientMeta.IsNil() && !state.IsNil() {
+			switch {
+			case clientMeta.IsNil() && !state.IsNil():
 				added = append(added, clientID)
-			} else if !clientMeta.IsNil() && state.IsNil() {
+			case !clientMeta.IsNil() && state.IsNil():
 				removed = append(removed, clientID)
-			} else if !state.IsNil() {
+			case !state.IsNil():
 				// Mirror y-protocols applyAwarenessUpdate:
 				//   if (!f.equalityDeep(state, prevState)) { filteredUpdated.push(clientID) }
 				// The direction here was already correct; the fix is the comparator —
@@ -666,6 +671,7 @@ func applyAwarenessUpdateWithoutEvents(awareness *Awareness, update []byte) erro
 }
 
 // ---------------------------------------------------------------- from awareness_managed.go
+
 // ManagedAwareness owns the reference's presence timer.
 //
 // It exists because the reference's interval does TWO things and only one of them can be made

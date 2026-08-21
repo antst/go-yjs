@@ -112,7 +112,7 @@ func TestRegressionReadKeyNegativeNoPanic(t *testing.T) {
 	// Seed a keyClock column that decodes to a negative running value. An
 	// IntDiffOptRle single value of -1 encodes via writeVarIntSigned.
 	keyClock := new(bytes.Buffer)
-	writeVarIntSigned(keyClock, -1*2 /*diff*2, no count*/, false)
+	writeVarIntSigned(keyClock, -1*2 /*diff*2, no count*/)
 	dec.keyClockDecoder = newIntDiffOptRLEDecoder(keyClock.Bytes())
 	dec.stringDecoder = newStringDecoder([]byte{0}) // empty string column
 
@@ -132,7 +132,7 @@ func TestRegressionReadKeyOutOfRangeErrors(t *testing.T) {
 	// keyClock = 5 with an empty cache: in-range-but-wrong index must error, not
 	// silently mis-pair (finding #3).
 	keyClock := new(bytes.Buffer)
-	writeVarIntSigned(keyClock, 5*2, false) // diff 5, single value
+	writeVarIntSigned(keyClock, 5*2) // diff 5, single value
 	dec.keyClockDecoder = newIntDiffOptRLEDecoder(keyClock.Bytes())
 	dec.stringDecoder = newStringDecoder([]byte{0})
 

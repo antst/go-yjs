@@ -55,7 +55,7 @@ func streamedVsMaterialized(t *testing.T, store *structStore, label string) {
 func TestStreamedDeleteSetMatchesMaterializedOnRealDocuments(t *testing.T) {
 	for seed := 0; seed < 300; seed++ {
 		gc := seed%2 == 0
-		doc := newDoc("g", gc, defaultGCFilter, nil, false, WithClientID(Number(1+seed%4)))
+		doc := newDoc("g", gc, defaultGCFilter, nil, false, WithClientID(1+seed%4))
 		txt := doc.GetText("t")
 		arr := doc.GetArray("a")
 		m := doc.GetMap("m")
@@ -63,13 +63,13 @@ func TestStreamedDeleteSetMatchesMaterializedOnRealDocuments(t *testing.T) {
 
 		// Several peers, so the store holds multiple clients in non-numeric insertion order.
 		for peer := 0; peer < 1+seed%3; peer++ {
-			other := newDoc("g", gc, defaultGCFilter, nil, false, WithClientID(Number(100+peer*37+seed%11)))
+			other := newDoc("g", gc, defaultGCFilter, nil, false, WithClientID(100+peer*37+seed%11))
 			ot := other.GetText("t")
 			for i := 0; i < 5+rng(20); i++ {
-				ot.Insert(Number(rng(int(ot.Length())+1)), "p", Object{})
+				ot.Insert(rng(ot.Length()+1), "p", Object{})
 			}
 			if ot.Length() > 4 {
-				ot.Delete(Number(rng(int(ot.Length())-2)), 2)
+				ot.Delete(rng(ot.Length()-2), 2)
 			}
 			enc, err := EncodeStateAsUpdateV2(other, nil)
 			if err != nil {
@@ -81,17 +81,17 @@ func TestStreamedDeleteSetMatchesMaterializedOnRealDocuments(t *testing.T) {
 		for step := 0; step < 30; step++ {
 			switch rng(6) {
 			case 0:
-				txt.Insert(Number(rng(int(txt.Length())+1)), "x", Object{})
+				txt.Insert(rng(txt.Length()+1), "x", Object{})
 			case 1:
 				if txt.Length() > 3 {
 					// Adjacent deletes on consecutive steps are what produce foldable runs.
-					txt.Delete(Number(rng(int(txt.Length())-2)), 1+Number(rng(2)))
+					txt.Delete(rng(txt.Length()-2), 1+rng(2))
 				}
 			case 2:
-				arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{step})
+				arr.Insert(rng(arr.GetLength()+1), ArrayAny{step})
 			case 3:
 				if arr.GetLength() > 2 {
-					arr.Delete(Number(rng(arr.GetLength()-1)), 1)
+					arr.Delete(rng(arr.GetLength()-1), 1)
 				}
 			case 4:
 				m.Set(fmt.Sprintf("k%d", rng(6)), step)

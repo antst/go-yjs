@@ -81,7 +81,9 @@ func (str *yString) UnobserveDeep(f func(interface{}, interface{})) {
 
 }
 
-func (str *yString) ToJson() interface{} {
+func (str *yString) toJSONValue() interface{} { return str.ToJSON() }
+
+func (str *yString) ToJSON() interface{} {
 	return ""
 }
 

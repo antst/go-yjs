@@ -35,9 +35,9 @@ func TestArenaDoesNotAccumulateEmptyBlocksUnderMerges(t *testing.T) {
 
 	// Fragment past the plain activation threshold so the tree exists.
 	for i := 0; i < buildListPositionIndexItems+4_000; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
-	arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{-1}) // force activation
+	arr.Insert(rng(arr.GetLength()+1), ArrayAny{-1}) // force activation
 	_, index := ownedListPositionIndex(arr)
 	if index == nil {
 		t.Fatal("no index activated; this test observes nothing")
@@ -50,7 +50,7 @@ func TestArenaDoesNotAccumulateEmptyBlocksUnderMerges(t *testing.T) {
 	// physical Item. Physical count therefore falls, unlike the append case where it only rises.
 	for round := 0; round < 30 && arr.GetLength() > 2_000; round++ {
 		Transact(doc, func(*Transaction) {
-			at := Number(rng(arr.GetLength() / 2))
+			at := rng(arr.GetLength() / 2)
 			n := Number(400)
 			if at+n >= arr.GetLength() {
 				n = arr.GetLength() - at - 1
@@ -59,7 +59,7 @@ func TestArenaDoesNotAccumulateEmptyBlocksUnderMerges(t *testing.T) {
 				arr.Delete(at, n)
 			}
 		}, nil, true)
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{round}) // keep the tree in use
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{round}) // keep the tree in use
 	}
 
 	_, index = ownedListPositionIndex(arr)
@@ -106,9 +106,9 @@ func TestDestroyReleasesNodeArena(t *testing.T) {
 		inner := NewYArray()
 		outer.Insert(0, ArrayAny{inner})
 		for i := 0; i < buildListPositionIndexItems+3_000; i++ {
-			inner.Insert(Number(rng(inner.GetLength()+1)), ArrayAny{i})
+			inner.Insert(rng(inner.GetLength()+1), ArrayAny{i})
 		}
-		inner.Insert(Number(rng(inner.GetLength()+1)), ArrayAny{-1}) // force activation
+		inner.Insert(rng(inner.GetLength()+1), ArrayAny{-1}) // force activation
 		if _, idx := ownedListPositionIndex(inner); idx == nil {
 			t.Fatal("no index activated; this test observes nothing")
 		}

@@ -28,7 +28,7 @@ func Memory(t *testing.T, factory RegistryFactory) {
 		var opens atomic.Int32
 		started := make(chan struct{})
 		proceed := make(chan struct{})
-		open := func(context.Context) (*crdt.Doc, error) {
+		var open memory.OpenFunc = func(context.Context) (*crdt.Doc, error) {
 			if opens.Add(1) == 1 {
 				close(started)
 			}

@@ -26,7 +26,7 @@ func growPastActivation(t *testing.T, arr *YArray) {
 	t.Helper()
 	rng := markerLCG(3)
 	for i := 0; i < buildListPositionIndexItems+2_000; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
 	if listItemCount(arr) < buildListPositionIndexItems {
 		t.Fatalf("fixture has %d items, need >= %d", listItemCount(arr), buildListPositionIndexItems)
@@ -74,10 +74,10 @@ func TestPositionIndexTableDoesNotAccumulateForFormattedText(t *testing.T) {
 		bold.Set("bold", true)
 		inner.Insert(0, "x", bold)
 		for i := 1; i < buildFormattedListPositionIndexItems+200; i++ {
-			inner.Insert(Number(1+rng(int(inner.Length()))), "x", Object{})
+			inner.Insert(1+rng(inner.Length()), "x", Object{})
 		}
 		// Force activation: a positioned edit inside the inherited run.
-		inner.Insert(Number(1+rng(int(inner.Length()))), "y", Object{})
+		inner.Insert(1+rng(inner.Length()), "y", Object{})
 		if s := indexTableSize(doc); s > peak {
 			peak = s
 		}

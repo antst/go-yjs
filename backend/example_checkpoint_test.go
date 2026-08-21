@@ -82,7 +82,7 @@ func (s *exampleBlobStore) LoadCheckpoint(ctx context.Context, id backend.Docume
 	// is not guessed — the store accepts only V2, so V2 is what it decodes.
 	vector, err := crdt.EncodeStateVectorFromUpdateV2(blob)
 	if err != nil {
-		return persistence.Checkpoint{}, fmt.Errorf("%w: %s", persistence.ErrCorrupt, err)
+		return persistence.Checkpoint{}, fmt.Errorf("%w: %w", persistence.ErrCorrupt, err)
 	}
 	return persistence.Checkpoint{
 		Revision:    s.revisions[id],

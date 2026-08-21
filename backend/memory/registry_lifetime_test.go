@@ -8,7 +8,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/antst/go-yjs/backend"
 	"github.com/antst/go-yjs/crdt"
 )
 
@@ -27,14 +26,14 @@ func closeRegistry(t *testing.T, r *InProcessRegistry) {
 	}
 }
 
-// waitForWaiters blocks until the entry for id has the expected waiter count,
-// so a test never has to sleep and hope.
-func waitForWaiters(t *testing.T, r *InProcessRegistry, id backend.DocumentID, want int) {
+// waitForWaiters blocks until the "doc" entry has the expected waiter count, so
+// a test never has to sleep and hope.
+func waitForWaiters(t *testing.T, r *InProcessRegistry, want int) {
 	t.Helper()
 	deadline := time.Now().Add(5 * time.Second)
 	for {
 		r.mu.Lock()
-		e := r.entries[id]
+		e := r.entries["doc"]
 		got := 0
 		if e != nil {
 			got = e.waiters
@@ -63,7 +62,7 @@ func TestOneCallersCancellationDoesNotCancelASharedOpen(t *testing.T) {
 	var mu sync.Mutex
 	openSeenErr := make(chan error, 1)
 
-	open := func(ctx context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(ctx context.Context) (*crdt.Doc, error) {
 		mu.Lock()
 		opens++
 		mu.Unlock()
@@ -82,7 +81,7 @@ func TestOneCallersCancellationDoesNotCancelASharedOpen(t *testing.T) {
 	aErr := make(chan error, 1)
 	go func() { _, err := registry.Acquire(ctxA, "doc", open); aErr <- err }()
 	<-entered
-	waitForWaiters(t, registry, "doc", 1)
+	waitForWaiters(t, registry, 1)
 
 	bHandle := make(chan Handle, 1)
 	bErr := make(chan error, 1)
@@ -91,13 +90,13 @@ func TestOneCallersCancellationDoesNotCancelASharedOpen(t *testing.T) {
 		bHandle <- h
 		bErr <- err
 	}()
-	waitForWaiters(t, registry, "doc", 2)
+	waitForWaiters(t, registry, 2)
 
 	cancelA()
 	if err := <-aErr; !errors.Is(err, context.Canceled) {
 		t.Fatalf("cancelled caller got %v, want context.Canceled", err)
 	}
-	waitForWaiters(t, registry, "doc", 1)
+	waitForWaiters(t, registry, 1)
 
 	// The open must still be live: B is waiting on it.
 	close(release)
@@ -136,7 +135,7 @@ func TestAbandonedInitializationIsCancelledAndNotCached(t *testing.T) {
 	var opens int
 	var mu sync.Mutex
 
-	open := func(ctx context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(ctx context.Context) (*crdt.Doc, error) {
 		mu.Lock()
 		opens++
 		first := opens == 1
@@ -160,7 +159,7 @@ func TestAbandonedInitializationIsCancelledAndNotCached(t *testing.T) {
 	done := make(chan error, 1)
 	go func() { _, err := registry.Acquire(ctx, "doc", open); done <- err }()
 	<-entered
-	waitForWaiters(t, registry, "doc", 1)
+	waitForWaiters(t, registry, 1)
 
 	cancel()
 	if err := <-done; !errors.Is(err, context.Canceled) {
@@ -206,7 +205,7 @@ func TestInvalidateCancelsAnInitializingGeneration(t *testing.T) {
 	var openReturned atomic.Bool
 	var opens int
 	var mu sync.Mutex
-	open := func(ctx context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(ctx context.Context) (*crdt.Doc, error) {
 		mu.Lock()
 		opens++
 		first := opens == 1
@@ -281,7 +280,7 @@ func TestCancelledCallerIsNotHandedAHandleAtFinalization(t *testing.T) {
 	registry := NewRegistry()
 	defer closeRegistry(t, registry)
 
-	open := func(context.Context) (*crdt.Doc, error) { return crdt.NewDoc("doc"), nil }
+	var open OpenFunc = func(context.Context) (*crdt.Doc, error) { return crdt.NewDoc("doc"), nil }
 	held, err := registry.Acquire(context.Background(), "doc", open)
 	if err != nil {
 		t.Fatal(err)
@@ -331,7 +330,7 @@ func TestAcquireRejectsAnAlreadyCancelledCaller(t *testing.T) {
 	defer closeRegistry(t, registry)
 
 	var opens int
-	open := func(context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(context.Context) (*crdt.Doc, error) {
 		opens++
 		return crdt.NewDoc("doc"), nil
 	}
@@ -370,7 +369,7 @@ func TestArrivingCallerDoesNotJoinAnAbandonedGeneration(t *testing.T) {
 	var opens int
 	var mu sync.Mutex
 
-	open := func(ctx context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(ctx context.Context) (*crdt.Doc, error) {
 		mu.Lock()
 		opens++
 		first := opens == 1
@@ -392,7 +391,7 @@ func TestArrivingCallerDoesNotJoinAnAbandonedGeneration(t *testing.T) {
 	aDone := make(chan error, 1)
 	go func() { _, err := registry.Acquire(ctxA, "doc", open); aDone <- err }()
 	<-firstEntered
-	waitForWaiters(t, registry, "doc", 1)
+	waitForWaiters(t, registry, 1)
 
 	cancelA()
 	if err := <-aDone; !errors.Is(err, context.Canceled) {
@@ -431,7 +430,7 @@ func TestArrivingCallerDoesNotJoinAnAbandonedGeneration(t *testing.T) {
 	if h == nil {
 		t.Fatal("B got no handle")
 	}
-	if got := h.Doc().Guid; got != "second" {
+	if got := h.Doc().GUID; got != "second" {
 		t.Fatalf("B received the document %q from the abandoned generation", got)
 	}
 	h.Release()
@@ -473,7 +472,7 @@ func TestReadyButNeverClaimedGenerationIsNotCached(t *testing.T) {
 	var once sync.Once
 	var opens int
 	var mu sync.Mutex
-	open := func(context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(context.Context) (*crdt.Doc, error) {
 		mu.Lock()
 		opens++
 		n := opens
@@ -492,13 +491,13 @@ func TestReadyButNeverClaimedGenerationIsNotCached(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan error, 1)
 	go func() { _, err := registry.Acquire(ctx, "doc", open); done <- err }()
-	waitForWaiters(t, registry, "doc", 1)
+	waitForWaiters(t, registry, 1)
 
 	registry.mu.Lock()
 	e := registry.entries["doc"]
 	e.waiters++ // the test joins as a second waiter
 	registry.mu.Unlock()
-	waitForWaiters(t, registry, "doc", 2)
+	waitForWaiters(t, registry, 2)
 
 	// The ordinary caller leaves while the open is still running. One waiter
 	// remains — this test — so the generation survives and completes.
@@ -506,7 +505,7 @@ func TestReadyButNeverClaimedGenerationIsNotCached(t *testing.T) {
 	if err := <-done; !errors.Is(err, context.Canceled) {
 		t.Fatalf("caller got %v, want context.Canceled", err)
 	}
-	waitForWaiters(t, registry, "doc", 1)
+	waitForWaiters(t, registry, 1)
 
 	close(release)
 	<-e.ready
@@ -575,7 +574,7 @@ func TestOpenContextKeepsCallerValuesAndDropsCallerDeadline(t *testing.T) {
 		hasDeadline bool
 	}
 	seen := make(chan observed, 1)
-	open := func(ctx context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(ctx context.Context) (*crdt.Doc, error) {
 		_, hasDeadline := ctx.Deadline()
 		seen <- observed{value: ctx.Value(openCtxKey{}), hasDeadline: hasDeadline}
 		return crdt.NewDoc("doc"), nil
@@ -615,7 +614,7 @@ func TestFailedOpenRetiresItsGenerationOnce(t *testing.T) {
 	var once sync.Once
 	var opens int
 	var mu sync.Mutex
-	open := func(context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(context.Context) (*crdt.Doc, error) {
 		mu.Lock()
 		opens++
 		n := opens
@@ -638,7 +637,7 @@ func TestFailedOpenRetiresItsGenerationOnce(t *testing.T) {
 		}()
 	}
 	<-entered
-	waitForWaiters(t, registry, "doc", 2)
+	waitForWaiters(t, registry, 2)
 
 	close(release)
 	for range 2 {
@@ -679,7 +678,7 @@ func TestWaiterDoesNotReceiveAGenerationRetiredWhileItWaited(t *testing.T) {
 	defer closeRegistry(t, registry)
 
 	var opens int
-	open := func(context.Context) (*crdt.Doc, error) {
+	var open OpenFunc = func(context.Context) (*crdt.Doc, error) {
 		opens++
 		return crdt.NewDoc("doc"), nil
 	}

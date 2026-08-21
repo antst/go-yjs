@@ -138,7 +138,7 @@ func TestClientStructListMatchesIndependentFlatOracleAfterEveryPrimitive(t *test
 					last := oracle.items[len(oracle.items)-1]
 					value := &abstractStructBase{
 						id:     GenID(first.id.Client, last.getID().Clock+last.structLength()),
-						length: Number(1 + rng.Intn(8)),
+						length: 1 + rng.Intn(8),
 					}
 					list.Append(value)
 					if err := oracle.insert(value); err != nil {
@@ -162,7 +162,7 @@ func TestClientStructListMatchesIndependentFlatOracleAfterEveryPrimitive(t *test
 						t.Fatal(err)
 					}
 					oldLength := left.structLength()
-					offset := Number(1 + rng.Intn(int(oldLength-1)))
+					offset := 1 + rng.Intn(oldLength-1)
 					left.setStructLength(offset)
 					right := &abstractStructBase{
 						id:     GenID(left.getID().Client, left.getID().Clock+offset),
@@ -211,7 +211,7 @@ func TestClientStructListMatchesIndependentFlatOracleAfterEveryPrimitive(t *test
 				case 5: // compare point lookup against an independently derived answer
 					last := oracle.items[len(oracle.items)-1]
 					end := last.getID().Clock + last.structLength()
-					clock := Number(rng.Intn(int(end)))
+					clock := rng.Intn(end)
 					want, found := oracle.find(clock)
 					cursor, err := list.Find(clock)
 					if found != (err == nil) {

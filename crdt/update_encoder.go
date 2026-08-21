@@ -199,8 +199,8 @@ func (v1 *updateEncoderV1) writeLength(length Number) {
 }
 
 // writeAnyValue writes the any of Item.
-func (v1 *updateEncoderV1) writeAnyValue(any any) error {
-	return writeAny(v1.rest, any)
+func (v1 *updateEncoderV1) writeAnyValue(value any) error {
+	return writeAny(v1.rest, value)
 }
 
 // writeBuffer writes the buf of Item.
@@ -525,7 +525,8 @@ func (e *fastUpdateEncoderV1) writeStructs(structs []abstractStruct, start int, 
 
 		if origin == nil && rightOrigin == nil {
 			parent := item.parent
-			if isAbstractType(parent) && !isYString(parent) && !isIDPtr(parent) {
+			switch {
+			case isAbstractType(parent) && !isYString(parent) && !isIDPtr(parent):
 				parentType := parent.(abstractType)
 				parentItem := parentType.getItem()
 				if parentItem == nil {
@@ -536,15 +537,15 @@ func (e *fastUpdateEncoderV1) writeStructs(structs []abstractStruct, start int, 
 					buf = appendVarUint(buf, uint64(parentItem.id.Client))
 					buf = appendVarUint(buf, uint64(parentItem.id.Clock))
 				}
-			} else if isYString(parent) {
+			case isYString(parent):
 				buf = append(buf, 1)
 				buf = appendString(buf, parent.(*yString).str)
-			} else if isIDPtr(parent) && parent.(*ID) != nil {
+			case isIDPtr(parent) && parent.(*ID) != nil:
 				buf = append(buf, 0)
 				parentID := parent.(*ID)
 				buf = appendVarUint(buf, uint64(parentID.Client))
 				buf = appendVarUint(buf, uint64(parentID.Clock))
-			} else {
+			default:
 				return fmt.Errorf("write struct: item %v has nil origin/rightOrigin and invalid parent %T", item.id, parent)
 			}
 			if parentSub != "" {
@@ -809,8 +810,8 @@ func (v2 *updateEncoderV2) writeLength(length Number) {
 }
 
 // writeAnyValue writes an arbitrary value into the rest buffer (lib0 any-encoding).
-func (v2 *updateEncoderV2) writeAnyValue(any any) error {
-	return writeAny(v2.rest, any)
+func (v2 *updateEncoderV2) writeAnyValue(value any) error {
+	return writeAny(v2.rest, value)
 }
 
 // writeBuffer writes a length-prefixed byte buffer into the rest buffer.
@@ -943,7 +944,8 @@ func (v2 *updateEncoderV2) writeStructs(structs []abstractStruct, start int, fir
 
 		if origin == nil && rightOrigin == nil {
 			parent := item.parent
-			if isAbstractType(parent) && !isYString(parent) && !isIDPtr(parent) {
+			switch {
+			case isAbstractType(parent) && !isYString(parent) && !isIDPtr(parent):
 				parentType := parent.(abstractType)
 				parentItem := parentType.getItem()
 				if parentItem == nil {
@@ -958,10 +960,10 @@ func (v2 *updateEncoderV2) writeStructs(structs []abstractStruct, start int, fir
 						v2.recordErr(v2.leftClockEncoder.writeValue(int64(parentItem.id.Clock)))
 					}
 				}
-			} else if isYString(parent) {
+			case isYString(parent):
 				v2.parentInfoEncoder.writeValue(1)
 				v2.stringEncoder.writeValue(parent.(*yString).str)
-			} else if isIDPtr(parent) && parent.(*ID) != nil {
+			case isIDPtr(parent) && parent.(*ID) != nil:
 				parentID := parent.(*ID)
 				v2.parentInfoEncoder.writeValue(0)
 				v2.clientEncoder.writeValue(uint64(parentID.Client))
@@ -970,7 +972,7 @@ func (v2 *updateEncoderV2) writeStructs(structs []abstractStruct, start int, fir
 				} else {
 					v2.recordErr(v2.leftClockEncoder.writeValue(int64(parentID.Clock)))
 				}
-			} else {
+			default:
 				return fmt.Errorf("write struct: item %v has nil origin/rightOrigin and invalid parent %T", item.id, parent)
 			}
 			if parentSub != "" {

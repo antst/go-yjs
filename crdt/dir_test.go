@@ -145,8 +145,8 @@ func dirBShape(t *testing.T, doc *Doc, label string, seed int) string {
 	// the format burst above would have been decorative. Coverage is a property of what is
 	// compared, not only of what is produced.
 	shape.Set("d", deltaSemantic(txt.ToDelta(nil, nil, nil)))
-	shape.Set("a", doc.GetArray("a").ToJson())
-	shape.Set("m", doc.GetMap("m").ToJson())
+	shape.Set("a", doc.GetArray("a").ToJSON())
+	shape.Set("m", doc.GetMap("m").ToJSON())
 	cn, err := fuzzCanon(shape)
 	if err != nil {
 		t.Fatalf("seed %d %s canon: %v", seed, label, err)
@@ -335,7 +335,7 @@ func validateDirBSuccessValues(c dirBCase) error {
 // This is the gap T032 closes. In direction A the reference collects before Go ever sees the bytes,
 // so Go's OWN gc decisions — which items become GC structs and how they encode — were never
 // compared against the reference at all.
-func buildDirBGCDoc(seed int) (*Doc, error) {
+func buildDirBGCDoc(seed int) *Doc {
 	rng := newDirBRand(seed)
 	doc := newDoc("g", true, defaultGCFilter, nil, false, WithClientID(1))
 	txt := doc.GetText("t")
@@ -363,7 +363,7 @@ func buildDirBGCDoc(seed int) (*Doc, error) {
 			m.Delete(string(letters[rng()%len(letters)]))
 		}
 	}
-	return doc, nil
+	return doc
 }
 
 // buildDirBDoc constructs a document NATIVELY with this library. Deterministic in `seed`, and
@@ -472,22 +472,22 @@ func buildDirBDoc(seed int) (*Doc, error) {
 	}
 	_ = txt.ToDelta(nil, nil, nil)
 	_ = txt.ToString()
-	_ = txt.ToJson()
+	_ = txt.ToJSON()
 	_ = txt.GetAttributes(nil)
 	_ = arr.ToArray()
-	_ = arr.ToJson()
+	_ = arr.ToJSON()
 	if arr.GetLength() > 0 {
 		_ = arr.Get(0)
 	}
 	if m != nil {
-		_ = m.ToJson()
+		_ = m.ToJSON()
 		_ = m.Keys()
 		_ = m.Values()
 		_ = m.Entries()
 		_ = m.GetSize()
 		_ = m.Has("k0")
 	}
-	_ = doc.GetXmlFragment("x").ToJson()
+	_ = doc.GetXMLFragment("x").ToJSON()
 	after, err := EncodeStateAsUpdateV2(doc, nil)
 	if err != nil {
 		return nil, err
@@ -606,8 +606,8 @@ func TestDirBDiff(t *testing.T) {
 			// covers the same three types on both sides.
 			shape := newObject()
 			shape.Set("t", doc.GetText("t").ToString())
-			shape.Set("a", doc.GetArray("a").ToJson())
-			shape.Set("m", doc.GetMap("m").ToJson())
+			shape.Set("a", doc.GetArray("a").ToJSON())
+			shape.Set("m", doc.GetMap("m").ToJSON())
 			cn, err := fuzzCanon(shape)
 			if err != nil {
 				t.Fatalf("seed %d canon: %v", s, err)
@@ -630,18 +630,15 @@ func TestDirBDiff(t *testing.T) {
 			}
 			rshape := newObject()
 			rshape.Set("t", restored.GetText("t").ToString())
-			rshape.Set("a", restored.GetArray("a").ToJson())
-			rshape.Set("m", restored.GetMap("m").ToJson())
+			rshape.Set("a", restored.GetArray("a").ToJSON())
+			rshape.Set("m", restored.GetMap("m").ToJSON())
 			if goSnapJSON[s], err = fuzzCanon(rshape); err != nil {
 				t.Fatalf("seed %d restored canon: %v", s, err)
 			}
 
 			// T032 — a gc-ENABLED build. Direction A never checks this library's OWN gc decisions,
 			// because there the reference has already collected before Go sees any bytes.
-			gdoc, err := buildDirBGCDoc(s)
-			if err != nil {
-				t.Fatalf("seed %d gc build: %v", s, err)
-			}
+			gdoc := buildDirBGCDoc(s)
 			genc, err := EncodeStateAsUpdateV2(gdoc, nil)
 			if err != nil {
 				t.Fatalf("seed %d gc encode: %v", s, err)
@@ -649,8 +646,8 @@ func TestDirBDiff(t *testing.T) {
 			goGCV2[s] = hex.EncodeToString(genc)
 			gshape := newObject()
 			gshape.Set("t", gdoc.GetText("t").ToString())
-			gshape.Set("a", gdoc.GetArray("a").ToJson())
-			gshape.Set("m", gdoc.GetMap("m").ToJson())
+			gshape.Set("a", gdoc.GetArray("a").ToJSON())
+			gshape.Set("m", gdoc.GetMap("m").ToJSON())
 			if goGCJSON[s], err = fuzzCanon(gshape); err != nil {
 				t.Fatalf("seed %d gc canon: %v", s, err)
 			}

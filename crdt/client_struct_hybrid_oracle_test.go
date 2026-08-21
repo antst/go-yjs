@@ -18,7 +18,7 @@ func TestStructTreeActiveCapableFlatCursorDispatchesOncePerOperation(t *testing.
 	// Located by the symbol it audits rather than by filename: guards that named
 	// a file as a string broke three times during file reorganisation, each with
 	// an error that said nothing about what to fix.
-	_, file := parseProductionFileDeclaring(t, "clientStructCursor.Next")
+	file := parseProductionFileDeclaring(t, "clientStructCursor.Next")
 
 	want := map[string]string{
 		"Valid": "validTree", "Value": "treeValue", "Next": "nextTree", "Prev": "prevTree",

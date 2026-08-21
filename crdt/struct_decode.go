@@ -575,7 +575,7 @@ func (d structDecoder) decode(
 		if err != nil {
 			return nil, clock, decodedStructItem, fmt.Errorf("item content: %w", err)
 		}
-		length := Number(len(str))
+		length := len(str)
 		if !isASCIIText(str) {
 			str, length = normalizeNonASCIITextUTF8WithLength(str)
 		}

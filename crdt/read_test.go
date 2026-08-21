@@ -34,7 +34,7 @@ func TestWithReadCacheDisabledRetainsNoDerivedProjections(t *testing.T) {
 	for i := 0; i < yMapEntriesCacheThreshold+2; i++ {
 		_ = ym.Keys()
 		_ = ym.Entries()
-		_ = ym.ToJson()
+		_ = ym.ToJSON()
 	}
 	if ym.keysCache.Load() != nil || ym.entriesCache.Load() != nil || ym.jsonCache.Load() != nil {
 		t.Fatal("disabled document retained a map read cache")
@@ -43,7 +43,7 @@ func TestWithReadCacheDisabledRetainsNoDerivedProjections(t *testing.T) {
 		t.Fatal("disabled document retained map cache priming state")
 	}
 
-	xml := doc.GetXmlFragment("x")
+	xml := doc.GetXMLFragment("x")
 	xml.Insert(0, ArrayAny{NewYXmlElement("a"), NewYXmlElement("b")})
 	_, _ = xml.Slice(0, 2), xml.Slice(0, 2)
 	if xml.sliceCache.Load() != nil || xml.slicePrimed.Load() {
@@ -127,14 +127,14 @@ func readAll(doc *Doc) string {
 	txt := doc.GetText("t")
 	shape := newObject()
 	shape.Set("toString", txt.ToString())
-	shape.Set("toJson", txt.ToJson())
+	shape.Set("toJson", txt.ToJSON())
 	shape.Set("toDelta", deltaSemantic(txt.ToDelta(nil, nil, nil)))
-	shape.Set("arr", doc.GetArray("a").ToJson())
+	shape.Set("arr", doc.GetArray("a").ToJSON())
 	// All three map read caches, because they are cross-wired: Keys and Entries may be served from
 	// the JSON projection when it is active, and the JSON and Entries caches are mutually
 	// exclusive. Reading only one of them would leave the reuse paths unobserved.
 	m := doc.GetMap("m")
-	shape.Set("map", m.ToJson())
+	shape.Set("map", m.ToJSON())
 	// SORTED: Keys() returns Go map-iteration order, which the runtime randomises per call, so
 	// comparing it raw compares the iterator rather than the document. This is the third variant of
 	// the same mistake in this file -- first pointer addresses, then insertion-ordered JSON, now
@@ -150,7 +150,7 @@ func readAll(doc *Doc) string {
 	// the attribute itself — so every projection that could conceivably carry one is read here.
 	// A child element's attribute is the interesting case: it is reachable through the PARENT's
 	// rendering and slice cache, not only through the child's own accessors.
-	f := doc.GetXmlFragment("x")
+	f := doc.GetXMLFragment("x")
 	shape.Set("xmlToString", f.ToString())
 	shape.Set("xmlSliceLen", strconv.Itoa(len(f.Slice(0, f.GetLength()))))
 	if f.GetLength() > 0 {
@@ -212,7 +212,7 @@ func applyCacheStep(doc *Doc, step, seed int) {
 			}
 		}
 	case 6: // type-level attributes: the paths whose invalidation was narrowed
-		f := doc.GetXmlFragment("x")
+		f := doc.GetXMLFragment("x")
 		if f.GetLength() == 0 {
 			f.Insert(0, ArrayAny{NewYXmlElement("div")})
 		}
@@ -411,7 +411,7 @@ func idxGetAgrees(t *testing.T, arr *YArray, label string) {
 	t.Helper()
 	want := arr.ToArray()
 	for i := range want {
-		if got := arr.Get(Number(i)); fmt.Sprintf("%v", got) != fmt.Sprintf("%v", want[i]) {
+		if got := arr.Get(i); fmt.Sprintf("%v", got) != fmt.Sprintf("%v", want[i]) {
 			t.Fatalf("%s: Get(%d)=%v, want %v", label, i, got, want[i])
 		}
 	}
@@ -425,7 +425,7 @@ func idxFixture(seed int, n int) (*Doc, *YArray) {
 	arr := doc.GetArray("a")
 	rng := markerLCG(uint32(seed*2654435761 + 7))
 	for i := 0; i < n; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
 	return doc, arr
 }
@@ -440,14 +440,14 @@ func TestReadIndexSplitPath(t *testing.T) {
 		for i := 0; i < 40; i++ {
 			arr.Insert(arr.GetLength(), ArrayAny{5000 + i})
 		}
-		_ = arr.Get(Number(arr.GetLength() / 2))
+		_ = arr.Get(arr.GetLength() / 2)
 		idxValidate(t, arr, fmt.Sprintf("seed %d after publish", seed))
 
 		rng := markerLCG(uint32(seed + 99))
 		for k := 0; k < 8; k++ {
-			at := Number(arr.GetLength() - 20 + rng(19))
+			at := arr.GetLength() - 20 + rng(19)
 			arr.Insert(at, ArrayAny{7000 + k}) // splits the run
-			_ = arr.Get(Number(rng(arr.GetLength())))
+			_ = arr.Get(rng(arr.GetLength()))
 			idxValidate(t, arr, fmt.Sprintf("seed %d split %d", seed, k))
 			idxGetAgrees(t, arr, fmt.Sprintf("seed %d split %d", seed, k))
 		}
@@ -463,16 +463,16 @@ func TestReadIndexGcPath(t *testing.T) {
 		arr := doc.GetArray("a")
 		rng := markerLCG(uint32(seed*7919 + 3))
 		for i := 0; i < 300; i++ {
-			arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+			arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 		}
 		_ = arr.Get(150)
 		idxValidate(t, arr, fmt.Sprintf("seed %d before delete", seed))
 
 		for k := 0; k < 6; k++ {
 			if arr.GetLength() > 10 {
-				arr.Delete(Number(rng(arr.GetLength()-5)), 3)
+				arr.Delete(rng(arr.GetLength()-5), 3)
 			}
-			_ = arr.Get(Number(rng(arr.GetLength())))
+			_ = arr.Get(rng(arr.GetLength()))
 			idxValidate(t, arr, fmt.Sprintf("seed %d gc %d", seed, k))
 			idxGetAgrees(t, arr, fmt.Sprintf("seed %d gc %d", seed, k))
 		}
@@ -490,19 +490,19 @@ func TestReadIndexNestedTypeDeletePath(t *testing.T) {
 		inner := NewYArray()
 		outer.Insert(0, ArrayAny{inner})
 		for i := 0; i < 200; i++ {
-			inner.Insert(Number(rng(inner.GetLength()+1)), ArrayAny{i})
+			inner.Insert(rng(inner.GetLength()+1), ArrayAny{i})
 		}
 		_ = inner.Get(100)
 		idxValidate(t, inner, fmt.Sprintf("seed %d inner published", seed))
 
 		for i := 0; i < 60; i++ {
-			outer.Insert(Number(rng(outer.GetLength()+1)), ArrayAny{i})
+			outer.Insert(rng(outer.GetLength()+1), ArrayAny{i})
 		}
 		_ = outer.Get(30)
 		idxValidate(t, outer, fmt.Sprintf("seed %d outer published", seed))
 
 		outer.Delete(0, 1) // deletes the nested type
-		_ = outer.Get(Number(rng(outer.GetLength())))
+		_ = outer.Get(rng(outer.GetLength()))
 		idxValidate(t, outer, fmt.Sprintf("seed %d outer after nested delete", seed))
 		idxGetAgrees(t, outer, fmt.Sprintf("seed %d outer after nested delete", seed))
 	}
@@ -516,26 +516,26 @@ func TestReadIndexUndoRedoPath(t *testing.T) {
 		arr := doc.GetArray("a")
 		rng := markerLCG(uint32(seed*104729 + 5))
 		for i := 0; i < 250; i++ {
-			arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+			arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 		}
 		um := newUndoManager(arr, 500, func(_ *itemStruct) bool { return true }, defaultTrackedOrigins())
 		_ = arr.Get(120)
 		idxValidate(t, arr, fmt.Sprintf("seed %d before undo", seed))
 
 		for k := 0; k < 5; k++ {
-			arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{8000 + k})
+			arr.Insert(rng(arr.GetLength()+1), ArrayAny{8000 + k})
 			if arr.GetLength() > 6 {
-				arr.Delete(Number(rng(arr.GetLength()-3)), 2)
+				arr.Delete(rng(arr.GetLength()-3), 2)
 			}
-			_ = arr.Get(Number(rng(arr.GetLength())))
+			_ = arr.Get(rng(arr.GetLength()))
 
 			um.Undo()
-			_ = arr.Get(Number(rng(arr.GetLength())))
+			_ = arr.Get(rng(arr.GetLength()))
 			idxValidate(t, arr, fmt.Sprintf("seed %d undo %d", seed, k))
 			idxGetAgrees(t, arr, fmt.Sprintf("seed %d undo %d", seed, k))
 
 			um.Redo()
-			_ = arr.Get(Number(rng(arr.GetLength())))
+			_ = arr.Get(rng(arr.GetLength()))
 			idxValidate(t, arr, fmt.Sprintf("seed %d redo %d", seed, k))
 			idxGetAgrees(t, arr, fmt.Sprintf("seed %d redo %d", seed, k))
 		}
@@ -560,10 +560,10 @@ func TestReadIndexRemoteApplyPath(t *testing.T) {
 		rng := markerLCG(uint32(seed + 4242))
 		pa := peer.GetArray("a")
 		for k := 0; k < 5; k++ {
-			pa.Insert(Number(rng(pa.GetLength()+1)), ArrayAny{6000 + k})
+			pa.Insert(rng(pa.GetLength()+1), ArrayAny{6000 + k})
 		}
 		if pa.GetLength() > 8 {
-			pa.Delete(Number(rng(pa.GetLength()-4)), 3)
+			pa.Delete(rng(pa.GetLength()-4), 3)
 		}
 		back, err := EncodeStateAsUpdateV2(peer, nil)
 		if err != nil {
@@ -571,7 +571,7 @@ func TestReadIndexRemoteApplyPath(t *testing.T) {
 		}
 		_ = ApplyUpdateV2(doc, back, nil)
 
-		_ = arr.Get(Number(rng(arr.GetLength())))
+		_ = arr.Get(rng(arr.GetLength()))
 		idxValidate(t, arr, fmt.Sprintf("seed %d after remote", seed))
 		idxGetAgrees(t, arr, fmt.Sprintf("seed %d after remote", seed))
 	}
@@ -582,20 +582,20 @@ func TestReadIndexRemoteApplyPath(t *testing.T) {
 func TestReadIndexXmlFragmentPath(t *testing.T) {
 	for seed := 0; seed < 100; seed++ {
 		doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-		f := doc.GetXmlFragment("x")
+		f := doc.GetXMLFragment("x")
 		rng := markerLCG(uint32(seed*15485863 + 17))
 		for i := 0; i < 200; i++ {
 			el := NewYXmlElement("div")
-			f.Insert(Number(rng(f.GetLength()+1)), ArrayAny{el})
+			f.Insert(rng(f.GetLength()+1), ArrayAny{el})
 		}
 		_ = f.Get(100)
 
 		for k := 0; k < 6; k++ {
-			f.Insert(Number(rng(f.GetLength()+1)), ArrayAny{NewYXmlElement("span")})
+			f.Insert(rng(f.GetLength()+1), ArrayAny{NewYXmlElement("span")})
 			if f.GetLength() > 6 {
-				f.Delete(Number(rng(f.GetLength()-3)), 2)
+				f.Delete(rng(f.GetLength()-3), 2)
 			}
-			_ = f.Get(Number(rng(f.GetLength())))
+			_ = f.Get(rng(f.GetLength()))
 
 			idx := f.readIndex.Load()
 			if idx == nil || idx == buildingListReadIndex {
@@ -677,7 +677,7 @@ func TestNearestReadPositionMatchesLinearForUnevenContent(t *testing.T) {
 		positions[i] = listReadPosition{p: &itemStruct{}, index: nextIndex}
 		// Deliberately alternate tiny and large visible spans. The interpolation probe is only a
 		// predictor; uneven ContentAny and ContentString runs must still get the exact answer.
-		nextIndex += Number(1 + (i*97)%211)
+		nextIndex += 1 + (i*97)%211
 	}
 	for index := Number(0); index < nextIndex+100; index++ {
 		want := positions[0]
@@ -762,7 +762,7 @@ func TestLargeListReadIndexDefersBuildUntilReuse(t *testing.T) {
 			defer wait.Done()
 			for read := 0; read < 128; read++ {
 				at := (worker*997 + read*31) % len(want)
-				if got := arr.Get(Number(at)); got != want[at] {
+				if got := arr.Get(at); got != want[at] {
 					t.Errorf("worker %d: Get(%d) = %v, want %v", worker, at, got, want[at])
 					return
 				}
@@ -820,19 +820,19 @@ func measureRebuildBytesPerCycle(t *testing.T, items int) float64 {
 	arr := doc.GetArray("a")
 	rng := markerLCG(7)
 	for i := 0; i < items; i++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 	}
 	// Read once before measuring, so the loop below measures steady post-mutation reads rather
 	// than the one-off cost of a cold cache.
-	_ = arr.Get(Number(items / 2))
+	_ = arr.Get(items / 2)
 
 	runtime.GC()
 	var before, after runtime.MemStats
 	runtime.ReadMemStats(&before)
 	const cycles = 100
 	for c := 0; c < cycles; c++ {
-		arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{c}) // invalidates the index
-		_ = arr.Get(Number(rng(arr.GetLength())))               // cannot use the index
+		arr.Insert(rng(arr.GetLength()+1), ArrayAny{c}) // invalidates the index
+		_ = arr.Get(rng(arr.GetLength()))               // cannot use the index
 	}
 	runtime.ReadMemStats(&after)
 	return float64(after.TotalAlloc-before.TotalAlloc) / cycles
@@ -888,9 +888,9 @@ func TestReadIndexNeverOutlivesItemLayout(t *testing.T) {
 		rng := markerLCG(uint32(seed*2654435761 + 1))
 
 		for i := 0; i < 400+seed; i++ {
-			arr.Insert(Number(rng(arr.GetLength()+1)), ArrayAny{i})
+			arr.Insert(rng(arr.GetLength()+1), ArrayAny{i})
 		}
-		_ = arr.Get(Number(arr.GetLength() / 2))
+		_ = arr.Get(arr.GetLength() / 2)
 
 		Transact(doc, func(*Transaction) {
 			for k := 0; k < 6; k++ {
@@ -906,7 +906,7 @@ func TestReadIndexNeverOutlivesItemLayout(t *testing.T) {
 		// oracle for every indexed result.
 		want := arr.ToArray()
 		for i := 0; i < len(want); i++ {
-			if got := arr.Get(Number(i)); fmt.Sprintf("%v", got) != fmt.Sprintf("%v", want[i]) {
+			if got := arr.Get(i); fmt.Sprintf("%v", got) != fmt.Sprintf("%v", want[i]) {
 				t.Fatalf("seed %d: Get(%d) = %v, want %v (list length %d)",
 					seed, i, got, want[i], len(want))
 			}

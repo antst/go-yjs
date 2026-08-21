@@ -78,7 +78,7 @@ func spliceStructInner(ss *[]abstractStruct, start Number, deleteCount Number, e
 // spliceArray inserts elements into a slice at the specified start index,
 // deleting deleteCount elements if deleteCount is greater than 0.
 // It returns the deleted elements if deleteCount is greater than 0, otherwise it returns nil.
-func spliceArray(a *ArrayAny, start Number, deleteCount Number, elements ArrayAny) ArrayAny {
+func spliceArray(a *ArrayAny, start Number, deleteCount Number, elements ArrayAny) {
 	// check if the capacity is enough to store the elements, if the deleted elements are greater than or equal to the elements to be inserted,
 	// then the elements to be deleted can be directly overwritten, and the remaining elements can be moved forward to the position of the elements to be deleted.
 	if deleteCount >= len(elements) {
@@ -95,13 +95,14 @@ func spliceArray(a *ArrayAny, start Number, deleteCount Number, elements ArrayAn
 		}
 
 		*a = (*a)[:first]
-		return nil
+		return
 	}
 
 	// the capacity is not enough to store the elements, then the elements need to be copied
 	// and the capacity is expanded to the sum of the original capacity and the length of the elements to be inserted.
 	if cap(*a) < (len(*a) + len(elements) - deleteCount) {
-		return spliceArrayInner(a, start, deleteCount, elements)
+		spliceArrayInner(a, start, deleteCount, elements)
+		return
 	}
 
 	// the capacity is enough to store the elements, then the elements need to be moved forward to the position of the elements to be deleted,
@@ -115,8 +116,6 @@ func spliceArray(a *ArrayAny, start Number, deleteCount Number, elements ArrayAn
 	}
 
 	copy((*a)[start:], elements)
-
-	return nil
 }
 
 // spliceArrayInner copies the elements to be inserted into a new slice,
@@ -323,7 +322,7 @@ func mapAny(m map[Number]Number, f func(key, value Number) bool) bool {
 
 // MergeSortedRange merges two sorted ranges of the given map. The isInc parameter determines the order of the ranges.
 func mapSortedRange(m map[Number]Number, isInc bool, f func(key, value Number)) {
-	var keys numberSlice
+	keys := make(numberSlice, 0, len(m))
 	for k := range m {
 		keys = append(keys, k)
 	}

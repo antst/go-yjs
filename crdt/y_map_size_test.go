@@ -143,17 +143,17 @@ func TestYMapJSONCacheIsolatedBoundedAndInvalidated(t *testing.T) {
 	ym.Set("b", 2)
 	var rendered Object
 	for i := 0; i < yMapEntriesCacheThreshold; i++ {
-		rendered = ym.ToJson().(Object)
+		rendered = ym.ToJSON().(Object)
 	}
 	if ym.jsonCache.Load() == nil {
-		t.Fatal("sustained ToJson reads did not populate the cache")
+		t.Fatal("sustained ToJSON reads did not populate the cache")
 	}
 	if ym.entriesCache.Load() != nil || ym.keysCache.Load() != nil {
 		t.Fatal("JSON projection retained duplicate map read caches")
 	}
 	rendered.Set("a", "caller mutation")
 	rendered.Set("injected", true)
-	next := ym.ToJson().(Object)
+	next := ym.ToJSON().(Object)
 	if got := next.GetOr("a"); got != 1 {
 		t.Fatalf("caller mutation changed cached JSON value: %#v", got)
 	}
@@ -171,7 +171,7 @@ func TestYMapJSONCacheIsolatedBoundedAndInvalidated(t *testing.T) {
 	if ym.jsonCache.Load() != nil || ym.jsonReads.Load() != 0 {
 		t.Fatal("local map mutation did not reset the JSON cache")
 	}
-	if got := ym.ToJson().(Object).Len(); got != 3 {
+	if got := ym.ToJSON().(Object).Len(); got != 3 {
 		t.Fatalf("JSON after mutation has %d entries, want 3", got)
 	}
 	replica := newDoc("map-json-cache", false, defaultGCFilter, nil, false, WithClientID(2))
@@ -182,7 +182,7 @@ func TestYMapJSONCacheIsolatedBoundedAndInvalidated(t *testing.T) {
 	_ = ApplyUpdateV2(replica, update, nil)
 	remote := replica.GetMap("m")
 	for i := 0; i < yMapEntriesCacheThreshold; i++ {
-		_ = remote.ToJson()
+		_ = remote.ToJSON()
 	}
 	if remote.jsonCache.Load() == nil {
 		t.Fatal("remote fixture did not populate the JSON cache")
@@ -196,16 +196,16 @@ func TestYMapJSONCacheIsolatedBoundedAndInvalidated(t *testing.T) {
 	if remote.jsonCache.Load() != nil || remote.jsonReads.Load() != 0 {
 		t.Fatal("remote map mutation did not reset the JSON cache")
 	}
-	if got := remote.ToJson().(Object).Len(); got != 4 {
+	if got := remote.ToJSON().(Object).Len(); got != 4 {
 		t.Fatalf("remote JSON after mutation has %d entries, want 4", got)
 	}
 
 	// Nested shared types render newly-created mutable values. Do not cache them shallowly: a
-	// caller mutating a nested rendering must not change what a later ToJson observes.
+	// caller mutating a nested rendering must not change what a later ToJSON observes.
 	nested := NewYMap(map[string]interface{}{"n": 1})
 	ym.Set("nested", nested)
 	for i := 0; i < yMapEntriesCacheThreshold+2; i++ {
-		_ = ym.ToJson()
+		_ = ym.ToJSON()
 	}
 	if ym.jsonCache.Load() != nil {
 		t.Fatal("map with a nested shared type populated the shallow JSON cache")
@@ -213,7 +213,7 @@ func TestYMapJSONCacheIsolatedBoundedAndInvalidated(t *testing.T) {
 	withUndefined := doc.GetMap("undefined")
 	withUndefined.Set("u", Undefined)
 	for i := 0; i < yMapEntriesCacheThreshold+2; i++ {
-		_ = withUndefined.ToJson()
+		_ = withUndefined.ToJSON()
 	}
 	if withUndefined.jsonCache.Load() != nil {
 		t.Fatal("undefined-valued map populated a projection that would omit a live key")

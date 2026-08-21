@@ -56,12 +56,12 @@ func TestScratchReuseElsewhereDoesNotDisturbAnotherText(t *testing.T) {
 		a.Set("tag", "CHURN")
 		a.Set("color", "#fff")
 		a.Set("extra", i)
-		churn.Insert(Number(i%(churn.Length()+1)), "z", a)
+		churn.Insert(i%(churn.Length()+1), "z", a)
 		if churn.Length() > 4 {
-			clear := newObject()
-			clear.Set("bold", Null)
-			clear.Set("color", Null)
-			churn.Format(Number(i%(churn.Length()-3)), 3, clear)
+			cleared := newObject()
+			cleared.Set("bold", Null)
+			cleared.Set("color", Null)
+			churn.Format(i%(churn.Length()-3), 3, cleared)
 		}
 		if got := deltaAttrs(t, stable); got != recorded {
 			t.Fatalf("step %d: the untouched text changed while another text reused the scratch\n"+

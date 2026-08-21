@@ -118,7 +118,7 @@ func (y *YEvent) targetType() abstractType { return y.target }
 
 func (y *YEvent) setCurrentTarget(t abstractType) { y.currentTarget = t }
 
-// Computes the path from `y` to the changed type.
+// Path computes the path from `y` to the changed type.
 //
 // @todo v14 should standardize on path: Array<{parent, index}> because that is easier to work with.
 //

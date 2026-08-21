@@ -139,9 +139,9 @@ func fuzzCanonArray(a []any) (string, error) {
 func fuzzDocCanon(doc *Doc) (string, error) {
 	obj := newObject()
 	obj.Set("t", doc.GetText("t").ToString())
-	obj.Set("m", doc.GetMap("m").ToJson())
-	obj.Set("a", doc.GetArray("a").ToJson())
-	obj.Set("x", doc.GetXmlFragment("x").ToJson())
+	obj.Set("m", doc.GetMap("m").ToJSON())
+	obj.Set("a", doc.GetArray("a").ToJSON())
+	obj.Set("x", doc.GetXMLFragment("x").ToJSON())
 	return fuzzCanon(obj)
 }
 
@@ -180,9 +180,9 @@ func fuzzDeltaCanon(ops []EventOperator) (string, error) {
 // ascending, each as [client, [[clock, len], ...]] with ranges in their stored order. Client order
 // is SORTED rather than iterated, because Go map iteration is randomised and the comparison would
 // otherwise fail at random.
-func fuzzDeleteSetCanon(ds *deleteSet) (string, error) {
+func fuzzDeleteSetCanon(ds *deleteSet) string {
 	if ds == nil {
-		return "[]", nil
+		return "[]"
 	}
 	clients := make([]Number, 0, len(ds.clients))
 	for c := range ds.clients {
@@ -198,7 +198,7 @@ func fuzzDeleteSetCanon(ds *deleteSet) (string, error) {
 		}
 		parts = append(parts, fmt.Sprintf("[%d,[%s]]", c, strings.Join(ranges, ",")))
 	}
-	return "[" + strings.Join(parts, ",") + "]", nil
+	return "[" + strings.Join(parts, ",") + "]"
 }
 
 func fuzzB64(t *testing.T, s string) []byte {
@@ -281,7 +281,7 @@ type fuzzSingleRec struct {
 	// the corpus was generated WITHOUT that surface. The strict checks fail fast on nil
 	// instead of silently skipping — otherwise a stale env-provided corpus would read
 	// as "covered" when the surface was never actually exercised.
-	XmlString     *string `json:"xmlString"`     // STRICT_XML (1.7B)
+	XMLString     *string `json:"xmlString"`     // STRICT_XML (1.7B)
 	PostGcState   *string `json:"postGcState"`   // STRICT_GC (1.2)
 	SnapDocV1     *string `json:"snapDocV1"`     // STRICT_SNAPSHOT (1.4): gc=false doc update
 	SnapshotV1    *string `json:"snapshotV1"`    // STRICT_SNAPSHOT
@@ -497,10 +497,7 @@ func TestFuzzGate(t *testing.T) {
 							rec.Seed, *rec.DecodedStructsV2, len(d2.structs))
 					}
 					if rec.DecodedDs != nil {
-						if got, err := fuzzDeleteSetCanon(d1.ds); err != nil {
-							ok = false
-							report("seed=%d decoded ds canon: %v", rec.Seed, err)
-						} else if got != *rec.DecodedDs {
+						if got := fuzzDeleteSetCanon(d1.ds); got != *rec.DecodedDs {
 							ok = false
 							report("seed=%d DECODED DS DIVERGENCE\n  js =%s\n  go =%s",
 								rec.Seed, *rec.DecodedDs, got)
@@ -659,16 +656,16 @@ func TestFuzzGate(t *testing.T) {
 							report("seed=%d xml PANIC: %v", rec.Seed, r)
 						}
 					}()
-					if rec.XmlString == nil {
+					if rec.XMLString == nil {
 						ok = false
 						report("seed=%d STRICT_XML set but corpus lacks xmlString (stale/mismatched corpus)", rec.Seed)
 						return
 					}
 					d := newDoc("guid", true, defaultGCFilter, nil, false)
 					_ = ApplyUpdateV2(d, fuzzB64(t, rec.UpdateV2), nil)
-					if got := d.GetXmlFragment("x").ToString(); got != *rec.XmlString {
+					if got := d.GetXMLFragment("x").ToString(); got != *rec.XMLString {
 						ok = false
-						report("seed=%d xml DIVERGENCE\n  js =%s\n  go =%s", rec.Seed, *rec.XmlString, got)
+						report("seed=%d xml DIVERGENCE\n  js =%s\n  go =%s", rec.Seed, *rec.XMLString, got)
 					}
 				}()
 			}
@@ -779,7 +776,7 @@ func TestFuzzGate(t *testing.T) {
 					}
 					// typeMapGetAllSnapshot — the Y.Map counterpart of the snapshot-aware
 					// ToDelta below, which this feature found had never once executed. Values are
-					// projected through ToJson on both sides: the raw content of a nested type is
+					// projected through ToJSON on both sides: the raw content of a nested type is
 					// a live type with parent back-pointers, which no canonicaliser can walk.
 					// Against the MID-STREAM snapshot on the ychange doc, not the
 					// end-of-document one: an end-of-document snapshot sees every live value,
@@ -788,7 +785,7 @@ func TestFuzzGate(t *testing.T) {
 					proj := newObject()
 					asOf.Range(func(k string, v any) {
 						if t, isType := v.(abstractType); isType && t != nil {
-							proj.Set(k, t.ToJson())
+							proj.Set(k, t.toJSONValue())
 						} else {
 							proj.Set(k, v)
 						}
@@ -859,7 +856,7 @@ func TestFuzzGate(t *testing.T) {
 					_ = ApplyUpdate(d, fuzzB64(t, *rec.SubdocUpdateV1), nil)
 					var guids []string
 					for sub := range d.GetSubdocs() {
-						guids = append(guids, sub.(*Doc).Guid)
+						guids = append(guids, sub.(*Doc).GUID)
 					}
 					sort.Strings(guids)
 					// Canonicalize BOTH sides: this is a set comparison, so a different

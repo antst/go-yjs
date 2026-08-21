@@ -279,7 +279,7 @@ func TestListPositionIndexInvariantsAfterEveryMutation(t *testing.T) {
 	array := doc.GetArray("a")
 	rng := newPerfLCG()
 	for value := 0; value < buildListPositionIndexItems+500; value++ {
-		array.Insert(rng.intn(int(array.GetLength())+1), ArrayAny{value})
+		array.Insert(rng.intn(array.GetLength()+1), ArrayAny{value})
 	}
 	if _, index := ownedListPositionIndex(array); index == nil {
 		t.Fatal("fixture did not activate the writer position index")
@@ -287,9 +287,9 @@ func TestListPositionIndexInvariantsAfterEveryMutation(t *testing.T) {
 
 	for op := 0; op < 240; op++ {
 		if op%3 == 0 {
-			array.Delete(rng.intn(int(array.GetLength())), 1)
+			array.Delete(rng.intn(array.GetLength()), 1)
 		} else {
-			array.Insert(rng.intn(int(array.GetLength())+1), ArrayAny{op})
+			array.Insert(rng.intn(array.GetLength()+1), ArrayAny{op})
 		}
 		_, index := ownedListPositionIndex(array)
 		if index == nil {
@@ -304,7 +304,7 @@ func TestListPositionIndexInvariantsAfterEveryMutation(t *testing.T) {
 	remote := newDoc("position-invariants", false, defaultGCFilter, nil, false, WithClientID(2))
 	remoteArray := remote.GetArray("a")
 	for value := 0; value < 240; value++ {
-		remoteArray.Insert(rng.intn(int(remoteArray.GetLength())+1), ArrayAny{-value})
+		remoteArray.Insert(rng.intn(remoteArray.GetLength()+1), ArrayAny{-value})
 	}
 	update, err := EncodeStateAsUpdateV2(remote, nil)
 	if err != nil {
@@ -462,7 +462,7 @@ func TestListPositionIndexEntryRemovedWhenNestedTypeIsGCd(t *testing.T) {
 	root.Insert(0, ArrayAny{nested})
 	rng := newPerfLCG()
 	for value := 0; value < buildListPositionIndexItems+100; value++ {
-		nested.Insert(rng.intn(int(nested.GetLength())+1), ArrayAny{value})
+		nested.Insert(rng.intn(nested.GetLength()+1), ArrayAny{value})
 	}
 	state, index := ownedListPositionIndex(nested)
 	if state == nil || index == nil {
@@ -490,7 +490,7 @@ func TestListPositionIndexEntryDiesWithDeletedNestedType(t *testing.T) {
 			root.Insert(0, ArrayAny{nested})
 			rng := newPerfLCG()
 			for value := 0; value < buildListPositionIndexItems+100; value++ {
-				nested.Insert(rng.intn(int(nested.GetLength())+1), ArrayAny{value})
+				nested.Insert(rng.intn(nested.GetLength()+1), ArrayAny{value})
 			}
 			state, index := ownedListPositionIndex(nested)
 			if state == nil || index == nil {
@@ -512,7 +512,7 @@ func TestSubdocumentDestroyDropsItsPositionIndexes(t *testing.T) {
 	array := subdoc.GetArray("a")
 	rng := newPerfLCG()
 	for value := 0; value < buildListPositionIndexItems+100; value++ {
-		array.Insert(rng.intn(int(array.GetLength())+1), ArrayAny{value})
+		array.Insert(rng.intn(array.GetLength()+1), ArrayAny{value})
 	}
 	state, index := ownedListPositionIndex(array)
 	if state == nil || index == nil {
@@ -542,7 +542,7 @@ func TestFormattingDestroysPositionIndexWithStaleFormatCounts(t *testing.T) {
 	text := doc.GetText("t")
 	rng := newPerfLCG()
 	for i := 0; i < buildListPositionIndexItems+100; i++ {
-		text.Insert(rng.intn(int(text.Length())+1), "x", Object{})
+		text.Insert(rng.intn(text.Length()+1), "x", Object{})
 	}
 	if _, index := ownedListPositionIndex(text); index == nil {
 		t.Fatal("fixture did not activate the writer position index")

@@ -223,18 +223,19 @@ func NewRelativePositionFromTypeIndex(tp SharedType, index, assoc Number) *Relat
 
 func writeRelativePosition(encoder *updateEncoderV1, rpos *RelativePosition) error {
 	t, tname, item, assoc := rpos.Type, rpos.Tname, rpos.Item, rpos.Assoc
-	if item != nil {
+	switch {
+	case item != nil:
 		writeVarUint(encoder.rest, 0)
 		encoder.writeID(item)
-	} else if tname != "" {
+	case tname != "":
 		// case 2: found position at the end of the list and type is stored in y.share
 		writeByte(encoder.rest, 1)
 		_ = encoder.writeStringValue(tname)
-	} else if t != nil {
+	case t != nil:
 		// case 3: found position at the end of the list and type is attached to an item
 		writeByte(encoder.rest, 2)
 		encoder.writeID(t)
-	} else {
+	default:
 		return errors.New("unexpected case")
 	}
 
@@ -381,7 +382,8 @@ func CreateAbsolutePositionFromRelativePosition(rpos *RelativePosition, doc *Doc
 			}
 		}
 	} else {
-		if tname != "" {
+		switch {
+		case tname != "":
 			// Generic root lookup, matching yjs's `doc.get(rpos.tname)` whose TypeConstructor
 			// defaults to AbstractType — it returns whatever type is registered under the name.
 			//
@@ -395,7 +397,7 @@ func CreateAbsolutePositionFromRelativePosition(rpos *RelativePosition, doc *Doc
 				return nil
 			}
 			t = existing
-		} else if typeID != nil {
+		case typeID != nil:
 			if getState(store, typeID.Client) <= typeID.Clock {
 				// type does not exist yet
 				return nil
@@ -408,7 +410,7 @@ func CreateAbsolutePositionFromRelativePosition(rpos *RelativePosition, doc *Doc
 				// struct is garbage collected
 				return nil
 			}
-		} else {
+		default:
 			return nil
 		}
 

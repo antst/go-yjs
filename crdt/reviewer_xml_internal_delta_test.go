@@ -18,7 +18,7 @@ import (
 func xmlFixture(t *testing.T, doc *Doc, spans int) *YXmlText {
 	t.Helper()
 	xt := NewYXmlText()
-	f := doc.GetXmlFragment("x")
+	f := doc.GetXMLFragment("x")
 	f.Insert(0, ArrayAny{xt})
 	for i := 0; i < spans; i++ {
 		xt.Insert(xt.Length(), fmt.Sprintf("s%d", i%10), Object{})
@@ -44,7 +44,7 @@ func xmlFixture(t *testing.T, doc *Doc, spans int) *YXmlText {
 			inner.Set("mid", "m")
 			a.Set("link", inner)
 		}
-		at := Number((i * 2) % maxInt(1, int(xt.Length())-2))
+		at := (i * 2) % maxInt(1, xt.Length()-2)
 		xt.Format(at, 2, a)
 	}
 	return xt

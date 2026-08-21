@@ -484,7 +484,7 @@ func TestReadAny(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if value.(bool) != false {
+	if value.(bool) {
 		t.Errorf("Expected value to be false, got '%t'", value)
 	}
 
@@ -495,7 +495,7 @@ func TestReadAny(t *testing.T) {
 	if err != nil {
 		t.Errorf("Expected no error, got %v", err)
 	}
-	if value.(bool) != true {
+	if !value.(bool) {
 		t.Errorf("Expected value to be true, got '%t'", value)
 	}
 

@@ -328,7 +328,7 @@ func itemFormatCount(item *itemStruct) uint8 {
 }
 
 func buildListPositionIndex(parent abstractType) *listPositionIndex {
-	blockCapacity := int(listItemCount(parent))/listPositionBlockItems + 1
+	blockCapacity := listItemCount(parent)/listPositionBlockItems + 1
 	index := &listPositionIndex{
 		anchors:           make(map[*itemStruct]*listPositionNode, blockCapacity),
 		nodeBlockCapacity: blockCapacity,
@@ -462,11 +462,12 @@ func (node *listPositionNode) recalculate() {
 func (index *listPositionIndex) replaceParentLink(old, replacement *listPositionNode) {
 	parent := old.parent
 	replacement.parent = parent
-	if parent == nil {
+	switch {
+	case parent == nil:
 		index.root = replacement
-	} else if parent.left == old {
+	case parent.left == old:
 		parent.left = replacement
-	} else {
+	default:
 		parent.right = replacement
 	}
 }
@@ -574,7 +575,7 @@ func (index *listPositionIndex) blockFor(item *itemStruct) *listPositionNode {
 				// Reaching an anchor is not sufficient: if this block's anchor was lost, the
 				// previous block's anchor is also reachable by walking left. Its declared item
 				// count proves whether it actually owns the starting Item.
-				if Number(steps) < node.items {
+				if steps < node.items {
 					return node
 				}
 				return nil

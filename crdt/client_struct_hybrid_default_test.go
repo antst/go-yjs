@@ -48,7 +48,7 @@ func TestProductionStructTreeActivatesOnlyAfterExactThreshold(t *testing.T) {
 	list := newClientStructList(clientStructTreeActivationLimit)
 	values := make([]*abstractStructBase, clientStructTreeActivationLimit-1)
 	for i := range values {
-		values[i] = &abstractStructBase{id: GenID(23, Number(i*2)), length: 2}
+		values[i] = &abstractStructBase{id: GenID(23, i*2), length: 2}
 		list.Append(values[i])
 	}
 
@@ -167,7 +167,7 @@ func TestProductionHotFlatPathsKeepDirectShape(t *testing.T) {
 
 	for _, path := range paths {
 		t.Run(path.function, func(t *testing.T) {
-			_, file := parseProductionFileDeclaring(t, path.function)
+			file := parseProductionFileDeclaring(t, path.function)
 			var target *ast.FuncDecl
 			for _, declaration := range file.Decls {
 				function, ok := declaration.(*ast.FuncDecl)

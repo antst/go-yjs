@@ -128,7 +128,7 @@ func TestStructDecodeStreamPreservesEveryClientBlockBoundary(t *testing.T) {
 				want := structDecodeBlock{
 					Client:        wantBlock.client,
 					StartClock:    wantBlock.clock,
-					DeclaredCount: Number(len(wantBlock.structs)),
+					DeclaredCount: len(wantBlock.structs),
 				}
 				if gotBlock != want {
 					t.Fatalf("block %d header = %#v, want %#v", i, gotBlock, want)

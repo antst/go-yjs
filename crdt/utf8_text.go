@@ -18,7 +18,7 @@ import (
 // boundaries for malformed sequences.
 func normalizeTextUTF8WithLength(s string) (string, Number) {
 	if isASCIIText(s) {
-		return s, Number(len(s))
+		return s, len(s)
 	}
 	return normalizeNonASCIITextUTF8WithLength(s)
 }

@@ -3,6 +3,7 @@ package crdt
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"testing"
@@ -142,7 +143,7 @@ func TestWriteReadInfo(t *testing.T) {
 
 func TestReadInfoEmptyInputReturnsEOF(t *testing.T) {
 	decoder := newUpdateDecoderV1(nil)
-	if _, err := decoder.readInfo(); err != io.EOF {
+	if _, err := decoder.readInfo(); !errors.Is(err, io.EOF) {
 		t.Fatalf("ReadInfo empty error = %v, want io.EOF", err)
 	}
 }

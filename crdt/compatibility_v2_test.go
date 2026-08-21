@@ -20,7 +20,7 @@ import (
 type v2Fixture struct {
 	Name         string          `json:"name"`
 	ClientID     Number          `json:"clientID"`
-	Guid         string          `json:"guid"`
+	GUID         string          `json:"guid"`
 	UpdateV1     string          `json:"updateV1"`
 	UpdateV2     string          `json:"updateV2"`
 	StateVector  string          `json:"stateVector"`
@@ -96,7 +96,7 @@ func assertV2Equal(t *testing.T, name string, build func(doc *Doc)) {
 	t.Helper()
 	fx := getFixture(t, name)
 
-	doc := newDoc(fx.Guid, true, defaultGCFilter, nil, false, WithClientID(fx.ClientID))
+	doc := newDoc(fx.GUID, true, defaultGCFilter, nil, false, WithClientID(fx.ClientID))
 	if doc.ClientID != fx.ClientID {
 		t.Fatalf("%s: clientID injection failed: doc.ClientID=%d want %d", name, doc.ClientID, fx.ClientID)
 	}
@@ -114,7 +114,7 @@ func assertV2Equal(t *testing.T, name string, build func(doc *Doc)) {
 func assertApplyV2(t *testing.T, name string) *Doc {
 	t.Helper()
 	fx := getFixture(t, name)
-	doc := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+	doc := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 	_ = ApplyUpdateV2(doc, b64dec(t, fx.UpdateV2), nil)
 	return doc
 }
@@ -311,7 +311,7 @@ func TestV2ArrayMixedApply(t *testing.T) {
 
 func TestV2XmlOperations(t *testing.T) {
 	assertV2Equal(t, "xml_fragment_insert", func(doc *Doc) {
-		frag := doc.GetXmlFragment("fragment-name")
+		frag := doc.GetXMLFragment("fragment-name")
 		xt := NewYXmlText()
 		frag.Insert(0, ArrayAny{xt})
 		frag.InsertAfter(xt, ArrayAny{NewYXmlElement("node-name")})
@@ -322,7 +322,7 @@ func TestV2XmlAttributes(t *testing.T) {
 	// This Go port's YXmlElement/YXmlText lack child-insert/format APIs, so the
 	// nested-child fixture can only be validated by applying the JS V2 payload.
 	doc := assertApplyV2(t, "xml_attributes")
-	if got := doc.GetXmlFragment("frag").GetLength(); got != 1 {
+	if got := doc.GetXMLFragment("frag").GetLength(); got != 1 {
 		t.Errorf("apply xml_attributes: want 1 top-level node got %d", got)
 	}
 }
@@ -448,10 +448,10 @@ func TestV2ConvertV1ToV2RoundTrip(t *testing.T) {
 
 			v2 := mustBytes(ConvertUpdateFormatV1ToV2(v1))
 			// V2 conversion should be applyable and reconstruct the same state.
-			docV2 := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+			docV2 := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 			_ = ApplyUpdateV2(docV2, v2, nil)
 
-			docV1 := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+			docV1 := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 			_ = ApplyUpdate(docV1, v1, nil)
 
 			// states must match
@@ -461,7 +461,7 @@ func TestV2ConvertV1ToV2RoundTrip(t *testing.T) {
 
 			// round back V2 -> V1, apply, compare
 			backV1 := mustBytes(ConvertUpdateFormatV2ToV1(v2))
-			docBack := newDoc(fx.Guid, true, defaultGCFilter, nil, false)
+			docBack := newDoc(fx.GUID, true, defaultGCFilter, nil, false)
 			_ = ApplyUpdate(docBack, backV1, nil)
 			if docBack.GetArray("a").GetLength() != docV1.GetArray("a").GetLength() {
 				t.Errorf("%s: V1->V2->V1 array length mismatch", name)

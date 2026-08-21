@@ -142,7 +142,7 @@ func TestRelativePositionIndexMatchesLinkedWalkAtEveryBoundary(t *testing.T) {
 	rng := markerLCG(0x51de)
 	retained := make([]*RelativePosition, 0, 40)
 	for inserted := 0; inserted < 240; inserted++ {
-		at := Number(rng(int(text.Length() + 1)))
+		at := rng(text.Length() + 1)
 		text.Insert(at, "x", Object{})
 		if inserted%6 == 0 {
 			retained = append(retained, linearRelativePositionFromTypeIndex(text, at, 0))
@@ -153,7 +153,7 @@ func TestRelativePositionIndexMatchesLinkedWalkAtEveryBoundary(t *testing.T) {
 	retained = append(retained, deletedAnchor)
 	for deleted := 0; deleted < 60; deleted++ {
 		if text.Length() > 2 {
-			text.Delete(Number(rng(int(text.Length()-1))), 1)
+			text.Delete(rng(text.Length()-1), 1)
 		}
 	}
 	bold := newObject()
@@ -237,7 +237,7 @@ func TestRelativePositionUsesActiveListIndexAtScale(t *testing.T) {
 	text := doc.GetText("t")
 	rng := markerLCG(0x1de5)
 	for inserted := 0; inserted < buildListPositionIndexItems+500; inserted++ {
-		text.Insert(Number(rng(int(text.Length()+1))), "x", Object{})
+		text.Insert(rng(text.Length()+1), "x", Object{})
 	}
 	_, index := ownedListPositionIndex(text)
 	if index == nil {
@@ -245,7 +245,7 @@ func TestRelativePositionUsesActiveListIndexAtScale(t *testing.T) {
 	}
 	validateListPositionTree(t, index, text)
 	for sample := 0; sample < 256; sample++ {
-		target := Number(rng(int(text.Length() + 1)))
+		target := rng(text.Length() + 1)
 		want := linearRelativePositionFromTypeIndex(text, target, 0)
 		got := newRelativePositionFromTypeIndex(text, target, 0)
 		if !CompareRelativePositions(got, want) {
@@ -270,7 +270,7 @@ func TestRelativePositionConcurrentReadsNeverActivateIndex(t *testing.T) {
 			text := doc.GetText("t")
 			rng := markerLCG(0xc011)
 			for inserted := 0; inserted < buildListPositionIndexItems+500; inserted++ {
-				text.Insert(Number(rng(int(text.Length()+1))), "x", Object{})
+				text.Insert(rng(text.Length()+1), "x", Object{})
 			}
 			_, built := ownedListPositionIndex(text)
 			if built == nil {
@@ -288,7 +288,7 @@ func TestRelativePositionConcurrentReadsNeverActivateIndex(t *testing.T) {
 				go func(worker int) {
 					defer wait.Done()
 					for step := 0; step < 64; step++ {
-						target := Number((worker*977 + step*131) % (int(text.Length()) + 1))
+						target := (worker*977 + step*131) % (text.Length() + 1)
 						position := newRelativePositionFromTypeIndex(text, target, 0)
 						absolute := CreateAbsolutePositionFromRelativePosition(position, doc)
 						if absolute == nil || absolute.Type != text || absolute.Index != target {

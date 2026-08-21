@@ -35,9 +35,9 @@ func binaryReadUvarint(buf *bytes.Buffer) (uint64, error) {
 // writeVarIntSigned writes an int64 using lib0's writeVarInt scheme. When
 // negative is true the sign bit is set even if num == 0 (negative zero), so a
 // value of 0 can still carry a "count follows" signal for the Opt-RLE codecs.
-func writeVarIntSigned(buf *bytes.Buffer, num int64, negative bool) {
-	if num < 0 {
-		negative = true
+func writeVarIntSigned(buf *bytes.Buffer, num int64) {
+	negative := num < 0
+	if negative {
 		num = -num
 	}
 	writeVarIntMag(buf, uint64(num), negative)

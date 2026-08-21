@@ -10,7 +10,7 @@ var benchContentStringUTF16IndexSink *contentStringUTF16Index
 
 func benchContentStringUTF16IndexBuild(b *testing.B, runes int) {
 	source := strings.Repeat("界", runes)
-	length := Number(runes)
+	length := runes
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
@@ -57,7 +57,7 @@ func newBenchStringDoc() *Doc {
 func buildCoalescedStringBenchTextIn(b *testing.B, doc *Doc, name string, runes int, unit string) (*YText, Number) {
 	b.Helper()
 	unitLength := stringLength(unit)
-	wantLength := Number(runes) * unitLength
+	wantLength := runes * unitLength
 	text := doc.GetText(name)
 	for j := 0; j < runes; j++ {
 		text.Insert(text.Length(), unit, Object{})

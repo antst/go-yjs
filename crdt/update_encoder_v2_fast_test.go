@@ -40,7 +40,8 @@ func TestFullStateV2FastPathMatchesGenericEncoder(t *testing.T) {
 		return doc
 	}
 
-	docs := []*Doc{build(1)}
+	docs := make([]*Doc, 0, 3)
+	docs = append(docs, build(1))
 	left := build(11)
 	right := build(99)
 	right.GetText("remote").Insert(0, "remote", newObject())
@@ -82,7 +83,7 @@ func TestFullStateV2PoolDoesNotAliasReturnedUpdates(t *testing.T) {
 	want := bytes.Clone(firstUpdate)
 
 	for i := 0; i < 20; i++ {
-		next := newDoc("pool", false, defaultGCFilter, nil, false, WithClientID(Number(i+2)))
+		next := newDoc("pool", false, defaultGCFilter, nil, false, WithClientID(i+2))
 		next.GetText("t").Insert(0, "a different document with a longer payload", newObject())
 		if _, err := EncodeStateAsUpdateV2(next, nil); err != nil {
 			t.Fatal(err)

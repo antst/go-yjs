@@ -343,7 +343,7 @@ func TestPushAppendsAfterTombstones(t *testing.T) {
 	// lands before the tombstone.
 	const refXML = "0102010007010166030364697647010003036469760101010001"
 	xdoc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-	frag := xdoc.GetXmlFragment("f")
+	frag := xdoc.GetXMLFragment("f")
 	frag.Insert(0, ArrayAny{NewYXmlElement("div")})
 	frag.Delete(0, 1)
 	frag.Push(ArrayAny{NewYXmlElement("div")})

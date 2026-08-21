@@ -403,6 +403,7 @@ func integrateStructs(trans *Transaction, store *structStore, clientsStructRefs 
 	var itemScratch integrationItemScratch
 
 	// iterate over all struct readers until we are done
+mergeLoop:
 	for {
 		if !isSameType(stackHead, &skipStruct{}) {
 			state[stackHead.getID().Client] = getState(store, stackHead.getID().Client)
@@ -452,22 +453,27 @@ func integrateStructs(trans *Transaction, store *structStore, clientsStructRefs 
 			}
 		}
 
-		// iterate to next stackHead
-		if len(stack) > 0 {
+		// iterate to next stackHead.
+		//
+		// The termination break is LABELLED. Inside a switch an unlabelled break
+		// binds to the switch, not the loop, which would turn "we are done" into
+		// an infinite loop — a real bug this rewrite introduced once before the
+		// label was added.
+		switch {
+		case len(stack) > 0:
 			stackHead = stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-		} else if curStructsTarget != nil && curStructsTarget.i < len(curStructsTarget.refs) {
+		case curStructsTarget != nil && curStructsTarget.i < len(curStructsTarget.refs):
 			stackHead = curStructsTarget.refs[curStructsTarget.i]
 			curStructsTarget.i++
-		} else {
+		default:
 			curStructsTarget = getNextStructTarget()
 			if curStructsTarget == nil {
 				// we are done
-				break
-			} else {
-				stackHead = curStructsTarget.refs[curStructsTarget.i]
-				curStructsTarget.i++
+				break mergeLoop
 			}
+			stackHead = curStructsTarget.refs[curStructsTarget.i]
+			curStructsTarget.i++
 		}
 	}
 
@@ -505,7 +511,7 @@ func writeStructsFromTransaction(encoder updateEncoder, trans *Transaction) erro
 // As in Yjs, the transaction is not a rollback boundary: structs integrated
 // before a malformed trailing field remain in the document. Callers receiving
 // an error must treat the replica as unsynchronised and recover by resyncing.
-func readUpdateV2(decoder updateDecoder, ydoc *Doc, transactionOrigin interface{}, structDecoder updateDecoder) error {
+func readUpdateV2(_ updateDecoder, ydoc *Doc, transactionOrigin interface{}, structDecoder updateDecoder) error {
 	var applyErr error
 	fail := func(stage string, err error) {
 		if applyErr != nil {
@@ -688,7 +694,8 @@ func applyUpdateWith(ydoc *Doc, update []uint8, transactionOrigin interface{}, s
 	return readUpdateV2(decoder, ydoc, transactionOrigin, structDecoder)
 }
 
-// Apply a document update created by, for example, `y.on('update', update => ..)` or `update = encodeStateAsUpdate()`.
+// ApplyUpdate applies a document update created by, for example,
+// `y.on('update', update => ..)` or `update = encodeStateAsUpdate()`.
 //
 // This function has the same effect as `readUpdate` but accepts an Uint8Array instead of a Decoder.
 // A non-nil error means the document may contain structs decoded before the bad
@@ -1014,7 +1021,7 @@ func DecodeStateVector(decodedState []uint8) (map[Number]Number, error) {
 // rest-framing, identical for V1 and V2). Narrowed from UpdateEncoder to DSEncoder
 // so a bare DSEncoderV2 (snapshots) can be passed; UpdateEncoder still satisfies
 // DSEncoder, so existing callers are unaffected.
-func writeStateVector(encoder dsEncoder, sv map[Number]Number) dsEncoder {
+func writeStateVector(encoder dsEncoder, sv map[Number]Number) {
 	rest := encoder.restEncoder()
 	writeVarUint(rest, uint64(len(sv)))
 	// Iterate clients in descending order so the output is deterministic (Go map
@@ -1024,7 +1031,6 @@ func writeStateVector(encoder dsEncoder, sv map[Number]Number) dsEncoder {
 		writeVarUint(rest, uint64(client))
 		writeVarUint(rest, uint64(clock))
 	})
-	return encoder
 }
 
 func writeDocumentStateVector(encoder updateEncoder, doc *Doc) {

@@ -83,7 +83,7 @@ func TestMapSet(t *testing.T) {
 		x.Set("k2", "v2")
 	}, nil)
 
-	content, err := json.Marshal(x.ToJson())
+	content, err := json.Marshal(x.ToJSON())
 	if err != nil {
 		t.Errorf("marshal x to json, err is %v", err)
 	}
@@ -115,7 +115,7 @@ func TestMapSet(t *testing.T) {
 		_ = ApplyUpdate(doc, payload, nil)
 	}, nil)
 
-	content, err = json.Marshal(doc.GetMap("test").ToJson())
+	content, err = json.Marshal(doc.GetMap("test").ToJSON())
 	if err != nil {
 		t.Errorf("marshal doc.GetMap(\"test\") to json, err is %v", err)
 	}
@@ -151,7 +151,7 @@ func TestArrayInsert(t *testing.T) {
 	x.Push([]any{"a"})
 	x.Push([]any{"b"})
 
-	content, err := json.Marshal(x.ToJson())
+	content, err := json.Marshal(x.ToJSON())
 	t.Logf("construct by golang, x is %s, err is %v", content, err)
 
 	if !bytes.Equal(content, []byte("[\"a\",\"b\"]")) {
@@ -174,7 +174,7 @@ func TestArrayInsert(t *testing.T) {
 	doc = newDoc("new doc", false, nil, nil, false)
 	_ = ApplyUpdate(doc, payload, nil)
 
-	content, err = json.Marshal(doc.GetArray("test").ToJson())
+	content, err = json.Marshal(doc.GetArray("test").ToJSON())
 	t.Logf("after apply update, x is %s, err is %v", content, err)
 
 	if !bytes.Equal(content, []byte("[\"a\",\"b\"]")) {
@@ -201,7 +201,7 @@ func TestXmlFragmentInsert(t *testing.T) {
 	// construct doc by golang and check to see if the result is the same as the expected.
 	// Pin the clientID to the JS fixture's value deterministically (no mockey).
 	doc := newDoc("guid", false, nil, nil, false, WithClientID(2459881872))
-	yxmlFragment := doc.GetXmlFragment("fragment-name")
+	yxmlFragment := doc.GetXMLFragment("fragment-name")
 	yxmlText := NewYXmlText()
 	yxmlFragment.Insert(0, ArrayAny{yxmlText})
 

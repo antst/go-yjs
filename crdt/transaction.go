@@ -820,8 +820,8 @@ func transact(doc *Doc, f func(trans *Transaction), origin interface{}, local, l
 // transactMutation is for package-owned mutation closures. Unlike exported
 // Transact, it may defer observer-only transaction fields while the document is
 // unobserved; nested calls reuse whichever transaction the outer caller opened.
-func transactMutation(doc *Doc, f func(trans *Transaction), origin interface{}, local bool) {
-	transact(doc, f, origin, local, true)
+func transactMutation(doc *Doc, f func(trans *Transaction)) {
+	transact(doc, f, nil, true, true)
 }
 
 // Transact implements the public transaction API with a fully materialized

@@ -197,7 +197,7 @@ func PersistenceFencing(t *testing.T, factory StoreFactory) {
 			}
 		}
 		for _, fence := range []backend.Fence{0, 1} {
-			want := error(persistence.ErrStaleFence)
+			want := persistence.ErrStaleFence
 			if fence == 0 {
 				want = persistence.ErrFenceRequired
 			}

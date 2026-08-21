@@ -40,7 +40,7 @@ func validateFuzzSingleBase(rec fuzzSingleRec) error {
 		{"dsEqualAfterExtraClient", rec.DsEqualAfterExtraClient},
 		{"logTypeChildren", rec.LogTypeChildren},
 		{"logTypeDeleted", rec.LogTypeDeleted},
-		{"xmlString", rec.XmlString},
+		{"xmlString", rec.XMLString},
 	}
 	for _, field := range pointersRequired {
 		if reflect.ValueOf(field.value).IsNil() {
@@ -114,7 +114,7 @@ func validateFuzzStrictSnapshot(rec fuzzSingleRec) error {
 }
 
 func validateFuzzStrictCells(rec fuzzSingleRec, strictXML, strictGC, strictSnapshot, strictSubdocs bool) error {
-	if strictXML && rec.XmlString == nil {
+	if strictXML && rec.XMLString == nil {
 		return fmt.Errorf("seed %d: STRICT_XML corpus lacks xmlString", rec.Seed)
 	}
 	if strictGC && (rec.PostGcState == nil || *rec.PostGcState == "") {
@@ -198,7 +198,7 @@ func TestDirectionARequiredCellsCannotGoEmpty(t *testing.T) {
 		ObfuscatedV1: "x", ObfuscatedV2: "x",
 		DecodedStructs: &one, DecodedStructsV2: &one, DecodedDs: &nonempty,
 		DsEqualAcrossFormats: &yes, DsEqualAfterExtraClient: &yes,
-		LogTypeChildren: &one, LogTypeDeleted: &one, XmlString: &empty,
+		LogTypeChildren: &one, LogTypeDeleted: &one, XMLString: &empty,
 		PostGcState: &nonempty, SnapDocV1: &nonempty, SnapshotV1: &nonempty,
 		SnapshotV2: &nonempty, RestoredState: &nonempty, YChangeDocV1: &nonempty,
 		YChangeEarlySnapV1: &nonempty, YChangeLateSnapV1: &nonempty, YChangeDelta: &nonempty,
@@ -211,7 +211,7 @@ func TestDirectionARequiredCellsCannotGoEmpty(t *testing.T) {
 	baseFields := []string{
 		"UpdateV1", "UpdateV2", "State", "TextDelta", "ObfuscatedV1", "ObfuscatedV2",
 		"DecodedStructs", "DecodedStructsV2", "DecodedDs", "DsEqualAcrossFormats",
-		"DsEqualAfterExtraClient", "LogTypeChildren", "LogTypeDeleted", "XmlString",
+		"DsEqualAfterExtraClient", "LogTypeChildren", "LogTypeDeleted", "XMLString",
 	}
 	for _, name := range baseFields {
 		broken := single

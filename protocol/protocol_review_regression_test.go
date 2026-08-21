@@ -186,7 +186,7 @@ func TestRegressionFramingCanonical(t *testing.T) {
 	var buf bytes.Buffer
 	WriteMessage(&buf, MessageSync, []byte{1, 2, 3})
 	// Canonical wire = VarUint(type) + raw payload, no in-band length prefix.
-	if want := []byte{byte(MessageSync), 1, 2, 3}; !bytes.Equal(buf.Bytes(), want) {
+	if want := []byte{MessageSync, 1, 2, 3}; !bytes.Equal(buf.Bytes(), want) {
 		t.Fatalf("canonical frame: want %v got %v", want, buf.Bytes())
 	}
 	typ, payload, err := ReadMessage(&buf)
@@ -205,7 +205,7 @@ func TestRegressionFramingRejectsOutOfRangeType(t *testing.T) {
 	buf.Write([]byte{1, 2})      // payload
 
 	_, _, err := ReadMessage(&buf)
-	if err != ErrInvalidMessageType {
+	if !errors.Is(err, ErrInvalidMessageType) {
 		t.Fatalf("ReadMessage: want ErrInvalidMessageType, got %v (finding #13)", err)
 	}
 }
@@ -237,7 +237,7 @@ func TestRegressionEncodeSyncStep2SurfacesError(t *testing.T) {
 	if len(out) == 0 {
 		t.Fatalf("well-formed EncodeSyncStep2: expected framed bytes, got empty")
 	}
-	if out[0] != byte(MessageSync) {
+	if out[0] != MessageSync {
 		t.Fatalf("well-formed EncodeSyncStep2: expected MessageSync framing, got type byte %d", out[0])
 	}
 

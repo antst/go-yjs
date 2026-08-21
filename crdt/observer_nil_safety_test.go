@@ -28,7 +28,7 @@ func TestObserverEntryPointsNilSafe(t *testing.T) {
 		txt := doc.GetText("t")
 		arr := doc.GetArray("a")
 		m := doc.GetMap("m")
-		f := doc.GetXmlFragment("x")
+		f := doc.GetXMLFragment("x")
 
 		// Every removal path on a type whose handler was never allocated.
 		txt.Unobserve(noop)

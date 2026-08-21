@@ -7,7 +7,7 @@ import (
 
 // ---------------------------------------------------------------- from xml_float_hook_parity_test.go
 // MAX-gateway finding (MAX-J): xmlAttrValueString sent float64 to %v, diverging
-// from JS Number::toString for large/small magnitudes, and a yXmlHook child was
+// from JS Number::toString for large/small magnitudes, and a yXMLHook child was
 // dropped to "" (no ToString) where yjs renders "[object Object]". Both expected
 // values are captured from yjs@13.6.31. Teeth: pre-fix %v gives "1e+20"/"1e-07"
 // and the hook child vanishes.
@@ -34,7 +34,7 @@ func TestXmlFloatAttrStringParity(t *testing.T) {
 	}
 	for _, c := range cases {
 		doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-		frag := doc.GetXmlFragment("x")
+		frag := doc.GetXMLFragment("x")
 		el := NewYXmlElement("e")
 		frag.Insert(0, ArrayAny{el})
 		el.SetAttribute("a", c.v)
@@ -48,7 +48,7 @@ func TestXmlFloatAttrStringParity(t *testing.T) {
 
 func TestXmlHookChildToStringParity(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	el := NewYXmlElement("div")
 	frag.Insert(0, ArrayAny{el})
 	el.Insert(0, ArrayAny{newYXmlHook("myhook")})
@@ -78,7 +78,7 @@ func TestXmlHookChildToStringParity(t *testing.T) {
 func TestChildListChangedFiresForListChanges(t *testing.T) {
 	t.Run("xml element", func(t *testing.T) {
 		doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-		f := doc.GetXmlFragment("x")
+		f := doc.GetXMLFragment("x")
 		el := NewYXmlElement("div")
 		f.Insert(0, ArrayAny{el})
 
@@ -104,7 +104,7 @@ func TestChildListChangedFiresForListChanges(t *testing.T) {
 
 	t.Run("xml attribute still reported as an attribute", func(t *testing.T) {
 		doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
-		f := doc.GetXmlFragment("x")
+		f := doc.GetXMLFragment("x")
 		el := NewYXmlElement("div")
 		f.Insert(0, ArrayAny{el})
 
@@ -153,7 +153,7 @@ func TestChildListChangedFiresForListChanges(t *testing.T) {
 // ---------------------------------------------------------------- from xml_text_internal_delta_cache_test.go
 func TestYXmlTextInternalDeltaCacheIsPrivateAndValidated(t *testing.T) {
 	doc := newDoc("xml-text-internal-delta", false, defaultGCFilter, nil, false, WithClientID(1))
-	fragment := doc.GetXmlFragment("x")
+	fragment := doc.GetXMLFragment("x")
 	text := NewYXmlText()
 	fragment.Insert(0, ArrayAny{text})
 	bold := newObject()
@@ -202,7 +202,7 @@ func TestYXmlTextInternalDeltaCacheIsPrivateAndValidated(t *testing.T) {
 // while a type that overrides toString (Y.XmlElement) renders through it.
 func TestXmlTextToStringEmbeddedNestedType(t *testing.T) {
 	doc := newDoc("g", false, nil, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	xt := NewYXmlText()
 	frag.Insert(0, ArrayAny{xt})
 	xt.ApplyDelta([]EventOperator{
@@ -220,7 +220,7 @@ func TestXmlTextToStringEmbeddedNestedType(t *testing.T) {
 // "[object Object]" — so a blanket all-IAbstractType->"[object Object]" would be wrong.
 func TestXmlAttrValueStringDispatchesNestedXmlElement(t *testing.T) {
 	doc := newDoc("g", false, nil, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	el := NewYXmlElement("b")
 	frag.Insert(0, ArrayAny{el})
 	if got, want := xmlAttrValueString(el), "<b></b>"; got != want {
@@ -233,9 +233,9 @@ func TestXmlAttrValueStringDispatchesNestedXmlElement(t *testing.T) {
 // (calling ToString on a nil receiver). The per-type dispatch introduced this risk.
 func TestXmlAttrValueStringTypedNil(t *testing.T) {
 	var nilText *YText
-	var nilXmlEl *YXmlElement
+	var nilXMLEl *YXmlElement
 	var nilMap *YMap // hits the IAbstractType catch-all path
-	cases := []any{nilText, nilXmlEl, nilMap}
+	cases := []any{nilText, nilXMLEl, nilMap}
 	for _, c := range cases {
 		if got := xmlAttrValueString(c); got != "null" {
 			t.Errorf("xmlAttrValueString(typed-nil %T) = %q, want \"null\"", c, got)
@@ -274,7 +274,7 @@ func TestXmlAttrValueString(t *testing.T) {
 
 func TestYXmlElementToStringMixedAttrs(t *testing.T) {
 	doc := newDoc("guid", false, nil, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	el := NewYXmlElement("DIV")
 	frag.Insert(0, ArrayAny{el})
 
@@ -294,7 +294,7 @@ func TestYXmlElementToStringMixedAttrs(t *testing.T) {
 // because the value wasn't an Object).
 func TestYXmlTextToStringBooleanMark(t *testing.T) {
 	doc := newDoc("guid", false, nil, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	xt := NewYXmlText()
 	frag.Insert(0, ArrayAny{xt})
 
@@ -313,7 +313,7 @@ func TestYXmlTextToStringBooleanMark(t *testing.T) {
 // against yjs@13.6.31: <comment id="c1" k="v">x</comment>.
 func TestYXmlTextToStringObjectMark(t *testing.T) {
 	doc := newDoc("guid", false, nil, nil, false, WithClientID(1))
-	frag := doc.GetXmlFragment("x")
+	frag := doc.GetXMLFragment("x")
 	xt := NewYXmlText()
 	frag.Insert(0, ArrayAny{xt})
 

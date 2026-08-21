@@ -393,9 +393,9 @@ func TestClearedStatePropagatesAsRemovalAcrossPeers(t *testing.T) {
 		removedSeen = append(removedSeen, obj.GetOr("removed").([]Number)...)
 	}))
 
-	_ = awA.SetLocalState(Object{}) // clear -> clock advances, States[100] deleted on A
-	clear := EncodeAwarenessUpdate(awA, []Number{100}, nil)
-	if err := ApplyAwarenessUpdate(awB, clear, "remote"); err != nil {
+	_ = awA.SetLocalState(Object{}) // cleared -> clock advances, States[100] deleted on A
+	cleared := EncodeAwarenessUpdate(awA, []Number{100}, nil)
+	if err := ApplyAwarenessUpdate(awB, cleared, "remote"); err != nil {
 		t.Fatalf("apply clearing update to peer B: %v", err)
 	}
 
@@ -568,13 +568,11 @@ func numsOf(o Object, key string) []int {
 	var out []int
 	switch t := v.(type) {
 	case []Number:
-		for _, n := range t {
-			out = append(out, int(n))
-		}
+		out = append(out, t...)
 	case []interface{}:
 		for _, n := range t {
 			if f, ok := n.(Number); ok {
-				out = append(out, int(f))
+				out = append(out, f)
 			}
 		}
 	}

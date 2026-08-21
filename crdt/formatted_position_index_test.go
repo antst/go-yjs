@@ -92,7 +92,7 @@ func TestFormattedPositionIndexInheritsAndRoundTrips(t *testing.T) {
 		// Stay inside or at the end of the bold run. Position zero intentionally has different
 		// boundary inheritance semantics and is covered by the ordinary YText tests.
 		at := 1 + rng(len(model))
-		text.Insert(Number(at), "x", Object{})
+		text.Insert(at, "x", Object{})
 		model = append(model, 0)
 		copy(model[at+1:], model[at:])
 		model[at] = 'x'
@@ -107,8 +107,8 @@ func TestFormattedPositionIndexMatchesFullAttributeWalkAtEveryPosition(t *testin
 	text.Insert(0, "x", boldAttr(true))
 	rng := markerLCG(0xa771)
 	for i := 1; i < buildFormattedListPositionIndexItems+700; i++ {
-		at := 1 + rng(int(text.Length()))
-		text.Insert(Number(at), "x", Object{})
+		at := 1 + rng(text.Length())
+		text.Insert(at, "x", Object{})
 	}
 	italic := newObject()
 	italic.Set("italic", true)
@@ -162,8 +162,8 @@ func TestFormattedPositionIndexHandlesNullAndUndoRedo(t *testing.T) {
 	// cheaply while retaining the opening bold marker and its Null closing marker.
 	rng := markerLCG(0x7eed)
 	for i := 0; i < buildListPositionIndexItems; i++ {
-		at := 1 + rng(int(text.Length()-1))
-		text.Insert(Number(at), "x", Object{})
+		at := 1 + rng(text.Length()-1)
+		text.Insert(at, "x", Object{})
 	}
 	if _, index := ownedListPositionIndex(text); index == nil {
 		t.Fatal("fixture did not activate the formatted position index")
