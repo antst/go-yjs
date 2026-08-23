@@ -409,6 +409,18 @@ type DeleteRequest struct {
 // Getting that order wrong loses no data and reports no error; it silently
 // restores content that was supposed to be erased, which for a deletion request
 // is the worst available failure.
+//
+// WHAT STEP 2 DOES NOT EXCLUDE. Invalidate returning does not mean nothing is
+// reading the document. It drains the CURRENT generation; it does not wait for
+// an already-abandoned one — a generation whose last waiter left while its open
+// was still running — to finish unwinding. Such an open is cancelled at
+// abandonment and its result is poisoned and destroyed, so it cannot publish and
+// cannot write the content back, which is why this is safe for the resurrection
+// hazard above. But its READ may still be in flight when step 3 deletes. If your
+// store's reads have side effects beyond returning bytes — read repair, undelete
+// on miss, metering that gates other decisions — that read can land after the
+// delete and you must exclude it yourself. Registry.Close still refuses while
+// any registry-owned goroutine remains, so shutdown ordering is unaffected.
 type Deleter interface {
 	// Delete removes the document's durable state. Returning nil means the
 	// removal crossed the same durability boundary a write does, and a
