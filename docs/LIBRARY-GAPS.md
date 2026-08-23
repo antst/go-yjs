@@ -117,7 +117,40 @@ Two things learned adopting it, worth keeping:
   via `ST1020`/`ST1021`/`ST1022`. golangci-lint deduplicates them, so the gap cannot be dodged by
   choosing a different linter.
 
-## 7. Code organisation
+## 7. Ambiguous FR citations in code — 50 sites
+
+Go comments cite requirement ids (`FR-008`) with no spec generation named. There are four
+generations under `specs/`, and **24 ids are defined in more than one of them with unrelated
+meanings**. Measured:
+
+| | |
+|---|---|
+| FR citations in Go code | 82 |
+| of those, document-qualified | **0** |
+| distinct ids cited | 34 |
+| **ambiguous** (defined in >1 spec) | **18 ids across 50 citations** |
+| unique (defined in exactly 1) | 16 ids across 41 citations |
+| unresolvable (defined in none) | 0 |
+
+Nothing is orphaned — every id resolves. That is the problem: `FR-008` is cited 11 times across 6
+files and resolves, depending on which spec the reader opens, to a `DiffUpdateV2` function (001),
+registering a nested document (002), the oracle running as a CI gate (003), or fault injection
+proving every surface (004). Four coherent answers, one intended. A citation that fails loudly is a
+nuisance; one that answers confidently and wrongly is what this repository spent a day learning to
+distrust elsewhere.
+
+**Why it is not already fixed.** The remedy is per-site judgement, and qualifying a citation to the
+WRONG generation is strictly worse than leaving it bare — bare is visibly ambiguous, wrong-but-
+qualified reads as authoritative. Most files are topically coherent and settle immediately, but not
+all: `crdt/awareness_test.go` cites ids from two generations at once (FR-009/010/011 match 004's
+presence redesign, FR-020/023 match 002's presence reaper), and only reading each site separates
+them.
+
+**The rule to apply when fixing:** cite the layer that outlives the work, *and* name the document
+unless the id is unique in the namespace a reader will search. Note that citing an FR rather than a
+task id is **not** sufficient protection here — every one of the 50 is already an FR.
+
+## 8. Code organisation
 
 **84 non-test Go files** across `crdt`, `protocol`, `backend` and `internal`, against ygo's **29
 files / ~13,150 lines** for a different functional split. Some of that is Constitution II mandating
@@ -127,7 +160,7 @@ in the original comparison and which ygo does not have an equivalent of.
 
 The performance work this was waiting on has landed, so the stated ordering constraint is gone.
 
-## 8. Drop the last dependency — DONE
+## 9. Drop the last dependency — DONE
 
 `mitchellh/copystructure` was the only runtime dependency. It has been replaced with explicit copy
 code, so the module now has zero runtime dependencies and an empty `go.sum`, and reflection is out
