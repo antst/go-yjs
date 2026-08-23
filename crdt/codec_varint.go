@@ -32,9 +32,15 @@ func binaryReadUvarint(buf *bytes.Buffer) (uint64, error) {
 	return binary.ReadUvarint(buf)
 }
 
-// writeVarIntSigned writes an int64 using lib0's writeVarInt scheme. When
-// negative is true the sign bit is set even if num == 0 (negative zero), so a
-// value of 0 can still carry a "count follows" signal for the Opt-RLE codecs.
+// writeVarIntSigned writes an int64 using lib0's writeVarInt scheme, taking the
+// sign from num.
+//
+// It can no longer emit NEGATIVE ZERO. The sign used to be a parameter, so a
+// caller could set the sign bit on num == 0 and make a zero value carry the
+// "count follows" signal the Opt-RLE codecs read. Nothing passed that — all
+// callers passed false and all of them are tests — so the parameter went during
+// the v0.1.0 lint sweep. A guard test that needs to construct a negative zero
+// must call writeVarIntMag directly.
 func writeVarIntSigned(buf *bytes.Buffer, num int64) {
 	negative := num < 0
 	if negative {

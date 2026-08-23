@@ -49,10 +49,15 @@ Out of scope, and deliberately:
 ## What is already done about it
 
 - **Differential oracle against the JavaScript reference.** Thirteen surfaces,
-  both directions, 20,000 random seeds on every push and tiers up to ten million.
-  Direction B — bytes produced here and decoded by `yjs` — is the half that
-  catches a non-canonical encoding, because in direction A the bytes never
-  originate here.
+  20,000 random seeds on every push and tiers up to ten million. Direction B —
+  bytes produced here and decoded by `yjs` — is the half that catches a
+  non-canonical encoding, because in direction A the bytes never originate here.
+  **Only eight of the thirteen surfaces run direction B**: text, array, map,
+  XML, delta application, updates, snapshots, GC. Undo, relative positions,
+  sync, awareness and subdocuments are direction A only, so for those the bytes
+  this library emits are not differentially validated. Treat the oracle as
+  strong evidence for the shared data types and as partial evidence for the wire
+  surfaces. `specs/004-full-parity-coverage` is the work that closes it.
 - **Fuzz targets on every byte-ingress surface**, replayed from a committed
   corpus on every push, with per-call allocation budgets and no-hang deadlines
   rather than only checking for panics.
