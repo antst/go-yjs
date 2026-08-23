@@ -6,7 +6,9 @@ the right answer rather than deferred, so **read the entry before moving a pin**
 Full reasoning for each release is in its annotated tag (`git show v0.0.6`) and
 in the pull request it came from; this file is the index.
 
-## Unreleased
+## v0.1.0 — 2026-08-22
+
+Go-conventional naming, and a lint config that is actually enforced.
 
 ### Changed — breaking
 
@@ -21,6 +23,26 @@ in the pull request it came from; this file is the index.
   builds the XML form. The rename collided them and exposed it. The public method
   keeps each type's Yjs-correct signature; polymorphism moved to an unexported
   method.
+
+  **This reaches `Doc.ToJSON` too, which is the path that will actually catch
+  you.** The signature is unchanged — `Object` in both versions — but the *value*
+  under a root `YXmlText` key changes, because `Doc.ToJSON` used to resolve that
+  root through the inherited method. Measured on both tags:
+
+  | | v0.0.6 | v0.1.0 |
+  |---|---|---|
+  | `Doc.ToJSON()["x"]`, root `YXmlText` | `"hi"` | `"<bold>hi</bold>"` |
+  | `Doc.ToJSON()["x"]`, root `YXmlFragment` | `"<p></p>"` | `"<p></p>"` |
+
+  Only a root **`YXmlText`** moves. A root `YXmlFragment`, `YText`, `YArray` or
+  `YMap` is byte-identical, because each already had its own `ToJson`. So reading
+  keys (`Keys`, `Has`) is always safe; `json.Marshal` of the whole object is safe
+  unless a root is a `YXmlText`.
+
+  Recorded because the original note described this as a `YXmlText` change, which
+  is where a reader stops looking — the indirect route through `Doc.ToJSON` is
+  the one that bites. Found by two consumers checking the claim against their own
+  source rather than taking it.
 - Several internal signatures lost parameters and returns that no caller used
   (`transactMutation`, `writeVarIntSigned`, `writeStateVector`, `findMarker`,
   `spliceArray`, `findNextPosition`, `deleteText`).
