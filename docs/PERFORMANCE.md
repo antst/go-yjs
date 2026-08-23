@@ -1,7 +1,7 @@
 # Performance and retained read caches
 
 Repeated read/serialization calls use bounded, mutation-invalidated projections for fragmented
-text (`ToString`, `ToDelta`), maps (`Keys`, `Entries`, `ToJson`), and XML child slices. The caches
+text (`ToString`, `ToDelta`), maps (`Keys`, `Entries`, `ToJSON`), and XML child slices. The caches
 are deliberately deferred until repeated reads and are cleared by local and remote mutations. Map
 projections have per-type width caps and the two large map projections are mutually exclusive.
 
