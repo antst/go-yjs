@@ -30,6 +30,13 @@ from pathlib import Path
 
 # The 36 operations the oracle's coverage mapping tracks, grouped for presentation. The benchmark
 # name is the key; `op` is the tracked operation it exercises.
+#
+# The ToJson/ToJSON split in the three JSON rows is deliberate, not a missed rename. `op` is the Go
+# method, which v0.1.0 renamed to ToJSON. The KEY is a cross-language join label: it must match
+# `func BenchmarkTextToJson` in crdt/, and the same string emitted by bench/ygo/main.go and
+# bench/yrs/src/main.rs. Renaming the key means renaming it in all four places, one of which is a
+# separate module `go build ./...` cannot see -- and a partial rename fails SILENTLY, showing the
+# benchmark as missing rather than erroring.
 CATEGORIES = [
     ("Text — write", [
         ("TextAppendSmall", "Insert"), ("TextAppendLarge", "Insert"),
@@ -39,7 +46,7 @@ CATEGORIES = [
     ]),
     ("Text — read", [
         ("TextToDelta", "ToDelta"), ("TextToString", "ToString"),
-        ("TextToJson", "ToJson"), ("TextToStringFormatted", "ToString"),
+        ("TextToJson", "ToJSON"), ("TextToStringFormatted", "ToString"),
         ("TextGetAttributes", "GetAttributes"),
     ]),
     ("Array — write", [
@@ -48,13 +55,13 @@ CATEGORIES = [
         ("ArrayUnshift", "Unshift"), ("ArrayFrom", "From"),
     ]),
     ("Array — read", [
-        ("ArrayToArray", "ToArray"), ("ArrayToJson", "ToJson"),
+        ("ArrayToArray", "ToArray"), ("ArrayToJson", "ToJSON"),
         ("ArrayForEach", "ForEach"), ("ArrayGetRandom", "Get"),
         ("ArraySplice", "Splice"), ("ArrayMap", "Map"), ("ArrayRange", "Range"),
     ]),
     ("Map", [
         ("MapSet", "Set"), ("MapKeys", "Keys"), ("MapValues", "Values"),
-        ("MapEntries", "Entries"), ("MapToJson", "ToJson"), ("MapHas", "Has"),
+        ("MapEntries", "Entries"), ("MapToJson", "ToJSON"), ("MapHas", "Has"),
         ("MapClear", "Clear"), ("MapGetSize", "GetSize"),
     ]),
     ("XML", [

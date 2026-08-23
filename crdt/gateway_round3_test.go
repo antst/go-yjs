@@ -6,7 +6,7 @@ import "testing"
 // SubDocs holds *Doc (added in cleanupTransactions, read as *Doc in Destroy/GetSubdocs).
 // yjs getSubdocGUIDs maps each subdoc to its .guid. Teeth: pre-fix this panics
 // ("interface conversion: ... is *Doc, not string") on any doc that has a subdoc.
-func TestGetSubdocGuidsReturnsGuids(t *testing.T) {
+func TestGetSubdocGUIDsReturnsGUIDs(t *testing.T) {
 	doc := newDoc("g", false, defaultGCFilter, nil, false, WithClientID(1))
 	m := doc.GetMap("m")
 	m.Set("a", newDoc("guid-a", false, defaultGCFilter, nil, false))
