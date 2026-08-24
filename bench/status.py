@@ -17,7 +17,8 @@ reference columns: a missing competitor number is either GO-ONLY (the operation 
 in that implementation, verified) or MISSING (nobody wrote the case yet). Those are very different
 facts and the page distinguishes them.
 
-Ratios are reference/ours, so above 1.00x means this library is faster.
+Ratios are reference/ours, so above 1.00x means this library is faster. Verdict bands:
+below 0.85x is a clear loss, 0.85-1.15x is parity, above 1.15x is a clear win.
 """
 import argparse
 from datetime import datetime
@@ -253,6 +254,15 @@ YGO_LOCK_CAVEAT = ("ygo acquires a document RWMutex on every read and write (71 
                    "is that lock: a speed-versus-safety tradeoff, not a like-for-like result.")
 
 
+# A ratio near 1.00x is PARITY, not a win and not a loss. The previous bands called every ratio
+# below 1.00x a loss -- so 0.99x, a dead heat, rendered red -- and everything under 1.50x "thin",
+# so a genuine 1.4x lead got the same amber as a tie. Run-to-run spread on these benchmarks
+# reaches 20% on the JS side alone, which is why the parity band is +/-15% rather than something
+# tighter: inside it the harness cannot tell the two implementations apart.
+PARITY_LOW = 0.85
+PARITY_HIGH = 1.15
+
+
 def classify(ours, ref, name=None, impl=None):
     """Ratio and verdict for one reference cell."""
     if ours is None:
@@ -268,10 +278,10 @@ def classify(ours, ref, name=None, impl=None):
             return None, "na"
         return None, "noref"
     r = ref / ours
-    if r < 1.0:
+    if r < PARITY_LOW:
         return r, "loss"
-    if r < 1.5:
-        return r, "thin"
+    if r <= PARITY_HIGH:
+        return r, "parity"
     return r, "win"
 
 
@@ -313,7 +323,7 @@ def build_rows(go, js, rs, yg):
 
 
 def summarize(rows):
-    s = {"total": len(rows), "measured": 0, "unmeasured": [], "losses": [], "thin": [],
+    s = {"total": len(rows), "measured": 0, "unmeasured": [], "losses": [], "parity": [],
          "pending": [], "fastest": 0, "ranked": 0, "implausible": []}
     for r in rows:
         if r["ours"] is None:
@@ -327,8 +337,8 @@ def summarize(rows):
         for label, (ratio, verdict) in r["cells"].items():
             if verdict == "loss":
                 s["losses"].append((r["name"], label, ratio))
-            elif verdict == "thin":
-                s["thin"].append((r["name"], label, ratio))
+            elif verdict == "parity":
+                s["parity"].append((r["name"], label, ratio))
             elif verdict == "noref":
                 s["pending"].append((r["name"], label))
             if (ratio is not None
@@ -394,7 +404,7 @@ def html(rows, s, meta):
             # Nobody has run that harness case yet. This says something about US, not about them,
             # and must never render like the line above.
             return '<td class="c"><span class="p q" title="harness case not run yet">pending</span></td>'
-        klass = {"loss": "l", "thin": "t", "win": "w"}[verdict]
+        klass = {"loss": "l", "parity": "t", "win": "w"}[verdict]
         return f'<td class="c"><span class="p {klass}">{ratio:.2f}×</span></td>'
 
     body = []
@@ -409,7 +419,7 @@ def html(rows, s, meta):
         if r["best_ratio"] is None:
             bcell = '<td class="c"><span class="p u">—</span></td>'
         else:
-            bk = "l" if r["best_ratio"] < 1.0 else ("t" if r["best_ratio"] < 1.5 else "w")
+            bk = "l" if r["best_ratio"] < PARITY_LOW else ("t" if r["best_ratio"] <= PARITY_HIGH else "w")
             bcell = (f'<td class="c b"><span class="p {bk}" title="fastest competitor: '
                      f'{r["best_label"]}">{r["best_ratio"]:.2f}×</span></td>')
         note = UNIT_NOTES.get(r["name"])
@@ -507,7 +517,9 @@ p{{max-width:64ch}}
   <h1>Performance Status</h1>
   <p class="stand">Every operation the differential oracle tracks, measured against the yjs
   reference, yrs and reearth/ygo on one machine in one session. Ratios are reference ÷ ours, so
-  above 1.00× means this library is faster.</p>
+  above 1.00× means this library is faster. Anything between 0.85× and 1.15× is shown as
+  parity: run-to-run spread on these benchmarks is wide enough that the harness cannot
+  separate the two implementations inside that band.</p>
   <p class="meta">{meta}</p>
 </div>
 <div class="cards">
@@ -526,7 +538,7 @@ p{{max-width:64ch}}
 </table>
 </div>
 <p class="legend">ygo caveat: {ygo_caveat}</p>
-<p class="legend">green = we lead · amber = lead under 1.5× · red = we are slower ·
+<p class="legend">green = clear win (above 1.15×) · amber = parity (0.85–1.15×, inside run-to-run spread) · red = clear loss (below 0.85×) ·
 n/a = no counterpart in that implementation · — = not measured</p>
 <h2>Outstanding losses</h2>
 <ul>{losses}</ul>

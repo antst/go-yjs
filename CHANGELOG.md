@@ -6,6 +6,46 @@ the right answer rather than deferred, so **read the entry before moving a pin**
 Full reasoning for each release is in its annotated tag (`git show v0.0.6`) and
 in the pull request it came from; this file is the index.
 
+## v0.1.1 — 2026-08-24
+
+A measured decode win, and a performance page that distinguishes a tie from a loss.
+
+### Fixed
+
+- **The decoder progress guard summed every V2 column twice per struct.**
+  `stallGuard.progressed` evaluated the expensive nine-stream `RemainingLen` scan
+  before the clock-advance test that would have short-circuited it, so a
+  10,000-struct update performed 10,000 redundant scans. Reordering the `&&`
+  operands is worth **3–4% on `ApplyV1`/`ApplyV2`**, measured under both normal GC
+  and `GOGC=off`. The result is order-independent by construction — both operands
+  are pure length reads — so the guard fires on exactly the same inputs.
+
+### Changed
+
+- **`bench/status.py` now has a parity band.** Previously any ratio below 1.00×
+  was red, so a 0.99× dead heat read as a loss, and everything under 1.50× was
+  amber, so a genuine 1.4× lead looked the same as a tie. Now below 0.85× is a
+  clear loss, 0.85–1.15× is parity, and above 1.15× is a clear win. The band is
+  ±15% because run-to-run spread on these benchmarks reaches 20% on the JS side
+  alone; inside it the harness cannot separate the two implementations.
+
+### Added
+
+- **`docs/performance-status.html`** — the generated performance page, tracked so
+  the numbers travel with the release. Measured on one host in one session at
+  `fad342f`: all four implementations, no cross-window splice.
+
+### Documentation
+
+- `README` and `SECURITY.md` no longer claim the differential oracle runs both
+  directions on all thirteen surfaces. Eight do; **undo, relative positions, sync,
+  awareness and subdocuments are direction A only**, so for those the bytes this
+  library emits are not differentially validated.
+- `persistence.Deleter` now states what `Invalidate` does *not* exclude before a
+  durable delete: an already-abandoned generation's read may still be in flight.
+- Stale references the v0.1.0 rename sweep could not reach, in `docs/PERFORMANCE.md`,
+  `bench/status.py` and a test name.
+
 ## v0.1.0 — 2026-08-22
 
 Go-conventional naming, and a lint config that is actually enforced.
