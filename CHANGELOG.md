@@ -6,6 +6,25 @@ the right answer rather than deferred, so **read the entry before moving a pin**
 Full reasoning for each release is in its annotated tag (`git show v0.0.6`) and
 in the pull request it came from; this file is the index.
 
+## v0.1.2 — 2026-08-24
+
+The performance page in a format the forge will actually render.
+
+### Changed
+
+- **`docs/performance-status.html` is now `docs/PERFORMANCE-STATUS.md`.** GitHub
+  renders a tracked `.html` as source and serves it from the raw endpoint as
+  `text/plain`, on purpose — so the page shipped in v0.1.1 was unreadable exactly
+  where people look at it. `bench/status.py -o` now picks the renderer from the
+  output extension: `.md` renders Markdown, anything else HTML. Both come from the
+  same rows, so they cannot disagree. Verdicts appear as 🟢 / 🟡 / 🔴.
+- **`--allow-stale` now suppresses the page's embedded staleness banner**, not only
+  the exit code. A tracked generated page is one commit stale *by construction* —
+  generating it at commit X and committing it produces commit Y — so without this
+  the shipped page would permanently read "DO NOT QUOTE THESE NUMBERS". The
+  terminal warning still prints unconditionally, so an interactive run always says
+  so even when the page does not.
+
 ## v0.1.1 — 2026-08-24
 
 A measured decode win, and a performance page that distinguishes a tie from a loss.
@@ -31,9 +50,9 @@ A measured decode win, and a performance page that distinguishes a tie from a lo
 
 ### Added
 
-- **`docs/performance-status.html`** — the generated performance page, tracked so
-  the numbers travel with the release. Measured on one host in one session at
-  `fad342f`: all four implementations, no cross-window splice.
+- **`docs/PERFORMANCE-STATUS.md`** — the generated performance page, tracked so the
+  numbers travel with the release. Measured on one host in one session at `fad342f`:
+  all four implementations, no cross-window splice.
 
 ### Documentation
 
