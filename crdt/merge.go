@@ -175,7 +175,9 @@ func (g *stallGuard) snapshot(clock Number) (beforeRemaining int, beforeClock Nu
 // must stop: the stream is exhausted/corrupt. The internal stall counter resets
 // on any progress.
 func (g *stallGuard) progressed(beforeRemaining int, beforeClock, clock Number) bool {
-	if (beforeRemaining < 0 || decoderRemaining(g.decoder) >= beforeRemaining) && clock == beforeClock {
+	// A positive clock advance is sufficient proof of progress. Check it first so
+	// ordinary Items avoid summing every V2 column a second time.
+	if clock == beforeClock && (beforeRemaining < 0 || decoderRemaining(g.decoder) >= beforeRemaining) {
 		g.stalled++
 		return g.stalled <= g.max
 	}

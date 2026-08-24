@@ -10,6 +10,27 @@ import (
 	"time"
 )
 
+type remainingCallDecoder struct {
+	updateDecoder
+	calls int
+}
+
+func (d *remainingCallDecoder) RemainingLen() int {
+	d.calls++
+	return 0
+}
+
+func TestStallGuardClockAdvanceSkipsRemainingScan(t *testing.T) {
+	decoder := &remainingCallDecoder{updateDecoder: newDecoderV2(nil)}
+	guard := stallGuard{decoder: decoder, max: maxStallIterations}
+	if !guard.progressed(0, 41, 42) {
+		t.Fatal("clock advance was rejected as stalled")
+	}
+	if decoder.calls != 0 {
+		t.Fatalf("clock advance performed %d remaining-byte scans, want 0", decoder.calls)
+	}
+}
+
 // ---------------------------------------------------------------- from merge_delete_sets_bench_test.go
 var mergeDeleteSetBenchmarkSink *deleteSet
 
