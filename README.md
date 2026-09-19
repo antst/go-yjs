@@ -158,6 +158,10 @@ Run it with `bash fuzz/run-gate.sh --tier fast --dir both`, which needs `node` a
 
 ## Performance
 
+Large fragmented sequences use an AVL-balanced block index for mutation-position lookup: logarithmic tree descent followed by a bounded block scan. This is an internal accelerator; Yjs semantics and wire formats are unchanged. Formatted-text positioning also depends on preceding formatting boundaries.
+
+In the [recorded 256k random-insertion workload](docs/PERFORMANCE.md#large-plain-sequence-mutation-index), the indexed path was about 9.5x faster than this port's previous marker-cache path (Apple M1 Max, August 2026). This measures a specific local-edit workload, not a speedup over JavaScript Yjs or remote-update application.
+
 Benchmarks live in `bench/`, with matched workloads implemented four times — this library, `yjs`, `yrs` and `ygo` — driven by the same generator so the comparison is like for like. `bench/run-all.sh` runs them and `bench/status.py` reports, refusing to quote numbers measured against a different commit than the one checked out.
 
 See the [performance notes and tradeoffs](docs/PERFORMANCE.md) and [recorded benchmark results](docs/PERFORMANCE-STATUS.md). Results describe specific workloads and the recorded implementation versions and hardware. Positional-edit improvements apply to local sequence operations; they do not predict equivalent gains for servers primarily applying remote updates.
