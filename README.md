@@ -1,14 +1,18 @@
 # go-yjs
 
-A Go implementation of the [Yjs](https://github.com/yjs/yjs) CRDT, wire-compatible with the JavaScript reference.
+A pure-Go implementation of the [Yjs](https://github.com/yjs/yjs) CRDT for embedding collaborative documents into Go services.
 
-It exists so that a Go service can speak Yjs to browsers. You pull the module, implement the ports your deployment needs, and wire them together. The CRDT is the necessary part; the **contracts are the deliverable**.
+Use the CRDT and sync/awareness primitives directly, or combine them with the optional backend contracts, registry, hub, and adapter conformance suites. Your application owns transport, authentication, storage, and deployment.
+
+Supports Yjs V1/V2 updates, with [compatibility checked](#correctness) against the JavaScript reference implementation.
 
 ```
 go get github.com/antst/go-yjs
 ```
 
 Requires Go 1.26+. Zero runtime dependencies — `go.sum` is empty.
+
+Used by [Alkemio's collaboration service](https://github.com/alkem-io/collaboration-service) for collaborative memos and whiteboards, integrated with Alkemio's own transport, authentication, and persistence.
 
 ## Layout
 
@@ -53,6 +57,8 @@ The example pins client IDs so its output is reproducible. Ordinarily a document
 Available types: `Y.Doc`, `Y.Text`, `Y.Array`, `Y.Map`, `Y.XmlFragment`, `Y.XmlElement`, `Y.XmlText`, with subdocuments, snapshots, relative positions, an undo manager, and garbage collection.
 
 ## Building a backend
+
+Start with the executable [single-process integration example](backend/example_single_process_test.go) or [checkpoint-storage example](backend/example_checkpoint_test.go). [Alkemio's collaboration service](https://github.com/alkem-io/collaboration-service) shows a larger application integration.
 
 ### What you write, what ships
 
@@ -152,13 +158,19 @@ Run it with `bash fuzz/run-gate.sh --tier fast --dir both`, which needs `node` a
 
 ## Performance
 
+Large fragmented sequences use an AVL-balanced block index for mutation-position lookup: logarithmic tree descent followed by a bounded block scan. This is an internal accelerator; Yjs semantics and wire formats are unchanged. Formatted-text positioning also depends on preceding formatting boundaries.
+
+In the [recorded 256k random-insertion workload](docs/PERFORMANCE.md#large-plain-sequence-mutation-index), the indexed path was about 9.5x faster than this port's previous marker-cache path (Apple M1 Max, August 2026). This measures a specific local-edit workload, not a speedup over JavaScript Yjs or remote-update application.
+
 Benchmarks live in `bench/`, with matched workloads implemented four times — this library, `yjs`, `yrs` and `ygo` — driven by the same generator so the comparison is like for like. `bench/run-all.sh` runs them and `bench/status.py` reports, refusing to quote numbers measured against a different commit than the one checked out.
+
+See the [performance notes and tradeoffs](docs/PERFORMANCE.md) and [recorded benchmark results](docs/PERFORMANCE-STATUS.md). Results describe specific workloads and the recorded implementation versions and hardware. Positional-edit improvements apply to local sequence operations; they do not predict equivalent gains for servers primarily applying remote updates.
 
 ## Status
 
-Pre-1.0. The CRDT and both wire formats are complete and gated. The backend ports are newer and their shape may still move: `v0.0.5` changed what context `memory.OpenFunc` receives, and `v0.0.6` made the concurrency rules part of the base persistence suites and removed four conformance functions that had briefly been exported separately.
+Pre-1.0 and used by Alkemio's collaboration service. Public APIs, including backend contracts, may change between releases. Pin a version and review the [release notes](https://github.com/antst/go-yjs/releases) before upgrading.
 
-There are no external consumers, so breaking changes are made when they are the right answer rather than deferred. Read the release notes before moving a pin.
+Yjs compatibility is checked against pinned reference versions. The [Correctness](#correctness) section describes the tested surfaces and current coverage gaps.
 
 ## Origins
 
